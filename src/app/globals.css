@@ -1,26 +1,133 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:is(.dark, .dark *));
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #fbfafd;
+  --foreground: #0f0a1e;
+  --card-bg: #ffffff;
+  --card-border: #e9e5f5;
+  --primary-pink: #ff007f;
+  --primary-purple: #4a127a;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+.dark {
+  --background: #0d041a;
+  --foreground: #f8f6fc;
+  --card-bg: #160a2b;
+  --card-border: #311559;
+  --primary-pink: #ff007f;
+  --primary-purple: #7b1fa2;
 }
 
 body {
-  background: var(--background);
+  background-color: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+/* Official LVM Theme Utilities */
+.bg-lvm-production {
+  background: 
+    radial-gradient(ellipse 55% 75% at 96% 48%, rgba(114, 8, 192, 0.9) 0%, rgba(98, 11, 185, 0.45) 45%, transparent 80%),
+    linear-gradient(108deg, #260b71 0%, #250b73 28%, #2d1084 55%, #4311a2 78%, #5a0cb7 92%, #7208c0 100%);
+}
+
+.bg-lvm-gradient {
+  background: linear-gradient(135deg, #180838 0%, #2b0b57 45%, #4c117d 100%);
+}
+
+.bg-lvm-glow {
+  background: radial-gradient(circle at 80% 20%, rgba(255, 0, 127, 0.18) 0%, rgba(76, 17, 125, 0.25) 50%, transparent 80%);
+}
+
+.shadow-neon-pink {
+  box-shadow: 0 0 20px -3px rgba(255, 0, 127, 0.35);
+}
+
+.shadow-neon-pink-lg {
+  box-shadow: 0 0 35px -5px rgba(255, 0, 127, 0.5);
+}
+
+.shadow-neon-purple {
+  box-shadow: 0 0 25px -4px rgba(123, 31, 162, 0.4);
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #d8b4fe;
+  border-radius: 9999px;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: #4c1d95;
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: #ff007f;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-4px); }
+  40%, 80% { transform: translateX(4px); }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.25s ease-out forwards;
+}
+
+.animate-shake {
+  animation: shake 0.4s ease-in-out forwards;
+}
+
+/* Print Specific Optimizations */
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 1cm;
+  }
+
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+
+  nav, header, footer, button, .print\:hidden {
+    display: none !important;
+  }
+
+  .print\:block {
+    display: block !important;
+  }
+
+  .print\:grid {
+    display: grid !important;
+  }
+
+  table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+  }
+
+  th, td {
+    border-bottom: 1px solid #cbd5e1 !important;
+    color: #000000 !important;
+    padding: 4px 6px !important;
+  }
 }
