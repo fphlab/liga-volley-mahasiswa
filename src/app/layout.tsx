@@ -19,6 +19,11 @@ export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'),
   title: 'LIGA VOLI MAHASISWA (LVM) - Portal Resmi',
   description: 'Sistem Informasi Resmi Registrasi Peserta dan Modul Pelaporan Liga Voli Mahasiswa Nasional.',
+  icons: {
+    icon: '/lvm-badge.webp',
+    shortcut: '/lvm-badge.webp',
+    apple: '/lvm-badge.webp',
+  },
   openGraph: {
     title: 'LIGA VOLI MAHASISWA (LVM)',
     description: 'Portal Resmi Liga Voli Mahasiswa Nasional.',

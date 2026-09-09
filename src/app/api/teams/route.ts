@@ -22,7 +22,9 @@ export async function GET(request: NextRequest) {
       {
         success: false,
         error:
-          error instanceof Error
+          process.env.NODE_ENV === 'production'
+            ? 'Gagal mengambil data tim'
+            : error instanceof Error
             ? error.message
             : 'Gagal mengambil data tim',
       },
@@ -64,7 +66,9 @@ export async function POST(request: NextRequest) {
       {
         success: false,
         error:
-          error instanceof Error
+          process.env.NODE_ENV === 'production'
+            ? 'Terjadi kesalahan sistem saat mendaftarkan tim'
+            : error instanceof Error
             ? error.message
             : 'Terjadi kesalahan sistem saat mendaftarkan tim',
       },

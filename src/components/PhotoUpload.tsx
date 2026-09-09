@@ -10,10 +10,14 @@ interface PhotoUploadProps {
 }
 
 export default function PhotoUpload({ currentPhotoUrl, onPhotoUploaded, disabled = false }: PhotoUploadProps) {
-  const [preview, setPreview] = useState<string>(currentPhotoUrl || '');
+  const [tempPreview, setTempPreview] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [dragActive, setDragActive] = useState(false);
+  const [sessionUploadedUrl, setSessionUploadedUrl] = useState<string | null>(null);
+  const [sessionDeleteToken, setSessionDeleteToken] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const displayUrl = tempPreview || currentPhotoUrl || '';
 
   const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024; // 5MB limit
 
@@ -30,7 +34,7 @@ export default function PhotoUpload({ currentPhotoUrl, onPhotoUploaded, disabled
 
     const reader = new FileReader();
     reader.onload = () => {
-      setPreview(reader.result as string);
+      setTempPreview(reader.result as string);
     };
     reader.readAsDataURL(file);
 
@@ -46,14 +50,27 @@ export default function PhotoUpload({ currentPhotoUrl, onPhotoUploaded, disabled
 
       const data = await res.json();
       if (data.success && data.photoUrl) {
+        // Hapus file upload sebelumnya di sesi yang sama bila belum tersimpan ke DB
+        if (sessionUploadedUrl && sessionUploadedUrl !== data.photoUrl) {
+          fetch('/api/upload', {
+            method: 'DELETE',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-delete-token': sessionDeleteToken || '',
+            },
+            body: JSON.stringify({ photoUrl: sessionUploadedUrl, deleteToken: sessionDeleteToken }),
+          }).catch(() => {});
+        }
+        setSessionUploadedUrl(data.photoUrl);
+        setSessionDeleteToken(data.deleteToken || null);
         onPhotoUploaded(data.photoUrl);
       } else {
-        setPreview(currentPhotoUrl || '');
+        setTempPreview(null);
         alert(data.error || 'Gagal mengunggah foto.');
       }
     } catch (err) {
       console.error('Error uploading photo:', err);
-      setPreview(currentPhotoUrl || '');
+      setTempPreview(null);
       alert('Gagal mengunggah foto. Periksa koneksi Anda lalu coba lagi.');
     } finally {
       setIsUploading(false);
@@ -81,7 +98,19 @@ export default function PhotoUpload({ currentPhotoUrl, onPhotoUploaded, disabled
 
   const handleRemove = (e: React.MouseEvent) => {
     e.stopPropagation();
-    setPreview('');
+    if (sessionUploadedUrl) {
+      fetch('/api/upload', {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-delete-token': sessionDeleteToken || '',
+        },
+        body: JSON.stringify({ photoUrl: sessionUploadedUrl, deleteToken: sessionDeleteToken }),
+      }).catch(() => {});
+      setSessionUploadedUrl(null);
+      setSessionDeleteToken(null);
+    }
+    setTempPreview(null);
     onPhotoUploaded('');
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
@@ -116,11 +145,11 @@ export default function PhotoUpload({ currentPhotoUrl, onPhotoUploaded, disabled
         } ${disabled ? 'opacity-60 cursor-not-allowed' : ''}`}
         style={{ minHeight: '160px' }}
       >
-        {preview ? (
+        {displayUrl ? (
           <div className="relative w-full flex flex-col items-center">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src={preview}
+              src={displayUrl}
               alt="Foto Jersey"
               className="w-24 h-32 object-cover rounded-xl shadow-md border-2 border-pink-500/60"
             />

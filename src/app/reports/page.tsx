@@ -1,13 +1,10 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import Link from 'next/link';
 import { 
-  FileSpreadsheet, 
   Printer, 
   Download, 
   Search,
-  ArrowLeft,
   IdCard,
   CheckCircle2,
   BadgeCheck,
@@ -116,23 +113,15 @@ export default function ReportsPage() {
     <div className="space-y-5 sm:space-y-6 pb-20 max-w-7xl mx-auto">
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 print:hidden">
-        <div>
-          <Link
-            href="/"
-            className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 dark:text-purple-300/70 hover:text-pink-600 dark:hover:text-white transition-colors mb-1.5"
-          >
-            <ArrowLeft className="w-3.5 h-3.5" /> Kembali ke Dashboard
-          </Link>
-          <div className="flex items-center gap-3">
-            <LvmLogo variant="icon-only" size="sm" />
-            <div>
-              <h1 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight uppercase flex items-center gap-2">
-                Modul Pelaporan Resmi
-              </h1>
-              <p className="text-xs text-slate-500 dark:text-purple-300/70">
-                Rekapitulasi Report 1, Report 2, dan Report 3 Liga Voli Mahasiswa Nasional
-              </p>
-            </div>
+        <div className="flex items-center gap-3">
+          <LvmLogo variant="icon-only" size="sm" />
+          <div>
+            <h1 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight uppercase flex items-center gap-2">
+              Modul Pelaporan Resmi
+            </h1>
+            <p className="text-xs text-slate-500 dark:text-purple-300/70">
+              Rekapitulasi Report 1, Report 2, dan Report 3 Liga Voli Mahasiswa Nasional
+            </p>
           </div>
         </div>
 
@@ -271,6 +260,12 @@ export default function ReportsPage() {
 
       {/* Official Print Header */}
       <div className="hidden print:block text-center border-b-2 border-slate-900 pb-3 mb-4">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="/lvm-logo.png"
+          alt="Logo Liga Voli Mahasiswa"
+          className="h-14 w-auto mx-auto mb-2 object-contain"
+        />
         <h2 className="text-lg font-black uppercase text-black">
           LIGA VOLI MAHASISWA (LVM)
         </h2>

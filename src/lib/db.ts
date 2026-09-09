@@ -7,6 +7,8 @@ import {
   RegionalQuota,
 } from './types';
 import { BackendError, getDataBackend } from './backend';
+import { deleteStorageFile, deleteStorageFiles } from './storageService';
+
 
 // ============================================================
 // LAPISAN DATA — ORKESTRASI BISNIS
@@ -56,8 +58,16 @@ function describeBackendError(error: unknown): string | null {
         return error.detail || 'Data personel melanggar aturan keunikan (jersey/slot).';
     }
   }
-  if (error instanceof Error && /Kuota untuk Regional/i.test(error.message)) {
-    return error.message;
+  if (error instanceof Error) {
+    if (/Kuota untuk Regional/i.test(error.message)) {
+      return error.message;
+    }
+    if (/members_height_check/i.test(error.message)) {
+      return 'Tinggi badan harus antara 100 cm dan 250 cm.';
+    }
+    if (/members_weight_check/i.test(error.message)) {
+      return 'Berat badan harus antara 20 kg dan 200 kg.';
+    }
   }
   return null;
 }
@@ -202,6 +212,19 @@ export function createTeam(data: {
 }): Promise<{ success: boolean; team?: Team; error?: string }> {
   return withDatabaseLock(async () => {
     try {
+      if (!data.name || data.name.trim() === '') {
+        return { success: false, error: 'Nama Tim / Perguruan Tinggi wajib diisi' };
+      }
+      if (!data.province || data.province.trim() === '') {
+        return { success: false, error: 'Asal Provinsi wajib diisi' };
+      }
+      if (!data.region) {
+        return { success: false, error: 'Wilayah Regional wajib diisi' };
+      }
+      if (!data.category) {
+        return { success: false, error: 'Kategori Tim wajib diisi' };
+      }
+
       const backend = await getDataBackend();
 
       // Pre-check kuota untuk pesan error yang ramah (trigger DB sebagai backstop)
@@ -331,11 +354,23 @@ export function deleteTeam(id: string): Promise<{ success: boolean; error?: stri
   return withDatabaseLock(async () => {
     try {
       const backend = await getDataBackend();
-      // Personel ikut terhapus otomatis lewat ON DELETE CASCADE
+      // Ambil data tim terlebih dahulu untuk mengetahui foto personel yang perlu dibersihkan
+      const team = await backend.fetchTeamWithMembers(id);
+      const photoUrls = team?.members.map(m => m.photoUrl).filter(Boolean) || [];
+
+      // Personel ikut terhapus otomatis lewat ON DELETE CASCADE di database
       const found = await backend.deleteTeamById(id);
       if (!found) {
         return { success: false, error: 'Team tidak ditemukan' };
       }
+
+      // Bersihkan file foto dari storage
+      if (photoUrls.length > 0) {
+        deleteStorageFiles(photoUrls).catch(err => {
+          console.warn('Gagal membersihkan foto personel saat tim dihapus:', err);
+        });
+      }
+
       return { success: true };
     } catch (error) {
       console.error('deleteTeam fatal:', error);
@@ -419,6 +454,17 @@ export function updateMember(teamId: string, memberId: string, updates: Partial<
         updated = await backend.updateMemberColumns(teamId, memberId, patch);
         if (!updated) {
           return { success: false, error: 'Member tidak ditemukan' };
+        }
+
+        // Jika photo_url diperbarui atau dikosongkan, bersihkan file lama dari storage
+        if (
+          'photo_url' in patch &&
+          current.photoUrl &&
+          current.photoUrl !== patch.photo_url
+        ) {
+          deleteStorageFile(current.photoUrl).catch(err => {
+            console.warn('Gagal menghapus foto lama personel dari storage:', err);
+          });
         }
       }
 

@@ -9,11 +9,40 @@ import {
   CheckCircle2,
   AlertCircle,
   Save,
-  Shirt
+  Shirt,
+  Lock,
+  Unlock,
+  RotateCcw
 } from 'lucide-react';
 import { Team, Member, TeamRole, PlayingPosition, PLAYING_POSITIONS } from '@/lib/types';
 import PhotoUpload from '@/components/PhotoUpload';
 import LvmLogo from '@/components/LvmLogo';
+
+const getLocalDrafts = (id: string): Record<number, Partial<Member>> => {
+  if (typeof window === 'undefined') return {};
+  try {
+    const raw = localStorage.getItem(`lvm_roster_drafts_${id}`);
+    if (raw) {
+      return JSON.parse(raw);
+    }
+  } catch (e) {
+    console.warn('Gagal membaca draf roster:', e);
+  }
+  return {};
+};
+
+const saveLocalDrafts = (id: string, drafts: Record<number, Partial<Member>>) => {
+  if (typeof window === 'undefined') return;
+  try {
+    if (Object.keys(drafts).length === 0) {
+      localStorage.removeItem(`lvm_roster_drafts_${id}`);
+    } else {
+      localStorage.setItem(`lvm_roster_drafts_${id}`, JSON.stringify(drafts));
+    }
+  } catch (e) {
+    console.warn('Gagal menyimpan draf roster:', e);
+  }
+};
 
 export default function TeamRosterPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
@@ -25,9 +54,47 @@ export default function TeamRosterPage({ params }: { params: Promise<{ id: strin
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [hasSlotDraft, setHasSlotDraft] = useState<boolean>(false);
+  const [draftSlots, setDraftSlots] = useState<number[]>([]);
+  const [isPanitiaMode, setIsPanitiaMode] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      return Boolean(sessionStorage.getItem('lvm_admin_key'));
+    }
+    return false;
+  });
 
   const [formData, setFormData] = useState<Partial<Member>>({});
-  const [lastSyncKey, setLastSyncKey] = useState('');
+
+  const handleTogglePanitiaMode = async () => {
+    if (isPanitiaMode) {
+      setIsPanitiaMode(false);
+      sessionStorage.removeItem('lvm_admin_key');
+      return;
+    }
+
+    const input = prompt('Aksi ini memerlukan verifikasi Panitia. Masukkan PIN Panitia:');
+    if (!input || !input.trim()) return;
+
+    try {
+      const res = await fetch('/api/auth/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pin: input.trim() }),
+      });
+      const data = await res.json();
+      if (data.valid) {
+        sessionStorage.setItem('lvm_admin_key', input.trim());
+        setIsPanitiaMode(true);
+        setErrorMessage(null);
+      } else {
+        sessionStorage.removeItem('lvm_admin_key');
+        setIsPanitiaMode(false);
+        alert(data.error || 'PIN Panitia salah! Akses ditolak.');
+      }
+    } catch {
+      alert('Gagal memverifikasi PIN. Silakan coba lagi.');
+    }
+  };
 
   const fetchTeam = useCallback(() => {
     return fetch(`/api/teams/${teamId}`)
@@ -52,20 +119,88 @@ export default function TeamRosterPage({ params }: { params: Promise<{ id: strin
     fetchTeam();
   }, [fetchTeam]);
 
-  const currentMember = team?.members.find(m => m.slotIndex === selectedSlot);
-  const syncKey = team ? `${team.id}|${selectedSlot}|${team.updatedAt}` : '';
-  if (currentMember && syncKey !== lastSyncKey) {
-    setLastSyncKey(syncKey);
-    setFormData(currentMember);
-    setErrorMessage(null);
-  }
+  // Load existing draft slots on mount or teamId change
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      const drafts = getLocalDrafts(teamId);
+      setDraftSlots(Object.keys(drafts).map(Number));
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [teamId]);
+
+  // Sync formData and draft when slot or team changes
+  useEffect(() => {
+    if (!team) return;
+    const currentMember = team.members.find(m => m.slotIndex === selectedSlot);
+    if (!currentMember) return;
+
+    const timer = setTimeout(() => {
+      const drafts = getLocalDrafts(teamId);
+      const slotDraft = drafts[selectedSlot];
+
+      if (slotDraft && Object.keys(slotDraft).length > 0) {
+        setFormData(slotDraft);
+        setHasSlotDraft(true);
+      } else {
+        setFormData(currentMember);
+        setHasSlotDraft(false);
+      }
+      setErrorMessage(null);
+    }, 0);
+
+    return () => clearTimeout(timer);
+  }, [team, selectedSlot, teamId]);
 
   const handleSelectSlot = (slotIdx: number) => {
     setSelectedSlot(slotIdx);
   };
 
   const handleFormChange = (field: keyof Member, value: Member[keyof Member]) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
+    setFormData(prev => {
+      const next = { ...prev, [field]: value };
+
+      const currentMember = team?.members.find(m => m.slotIndex === selectedSlot);
+      if (currentMember) {
+        const isDifferent = Object.entries(next).some(([k, v]) => {
+          if (['slotIndex', 'id', 'teamId', 'createdAt', 'updatedAt'].includes(k)) return false;
+          const orig = currentMember[k as keyof Member];
+          const normNext = v === undefined || v === null ? '' : String(v).trim();
+          const normOrig = orig === undefined || orig === null ? '' : String(orig).trim();
+          return normNext !== normOrig;
+        });
+
+        const drafts = getLocalDrafts(teamId);
+        if (isDifferent) {
+          drafts[selectedSlot] = {
+            ...next,
+            slotIndex: selectedSlot,
+          };
+          saveLocalDrafts(teamId, drafts);
+          setDraftSlots(Object.keys(drafts).map(Number));
+          setHasSlotDraft(true);
+        } else {
+          delete drafts[selectedSlot];
+          saveLocalDrafts(teamId, drafts);
+          setDraftSlots(Object.keys(drafts).map(Number));
+          setHasSlotDraft(false);
+        }
+      }
+
+      return next;
+    });
+  };
+
+  const handleResetSlotDraft = () => {
+    const drafts = getLocalDrafts(teamId);
+    delete drafts[selectedSlot];
+    saveLocalDrafts(teamId, drafts);
+    setDraftSlots(Object.keys(drafts).map(Number));
+    setHasSlotDraft(false);
+
+    const currentMember = team?.members.find(m => m.slotIndex === selectedSlot);
+    if (currentMember) {
+      setFormData(currentMember);
+    }
   };
 
   const handleSaveMember = async (e?: React.FormEvent): Promise<boolean> => {
@@ -91,11 +226,20 @@ export default function TeamRosterPage({ params }: { params: Promise<{ id: strin
       }
     }
 
+    const adminKey = typeof window !== 'undefined' ? sessionStorage.getItem('lvm_admin_key') : null;
+    if (!adminKey) {
+      setErrorMessage('Formulir pendaftaran bersifat final & terkunci. Masukkan PIN Panitia untuk membuka izin edit.');
+      return false;
+    }
+
     try {
       setSaving(true);
       const res = await fetch(`/api/teams/${teamId}/members`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-key': adminKey,
+        },
         body: JSON.stringify({
           memberId: currentMember.id,
           updates: {
@@ -107,15 +251,27 @@ export default function TeamRosterPage({ params }: { params: Promise<{ id: strin
 
       const data = await res.json();
       if (!data.success) {
+        if (res.status === 401) {
+          sessionStorage.removeItem('lvm_admin_key');
+          setIsPanitiaMode(false);
+        }
         setErrorMessage(data.error || 'Gagal menyimpan data personel');
         return false;
       }
 
       setSaveSuccess(true);
+      const drafts = getLocalDrafts(teamId);
+      delete drafts[selectedSlot];
+      saveLocalDrafts(teamId, drafts);
+      setDraftSlots(Object.keys(drafts).map(Number));
+      setHasSlotDraft(false);
+
       if (data.team) {
         setTeam(data.team);
         const filled = data.team.members.filter((m: Member) => m.fullName && m.fullName.trim() !== '').length;
         if (filled === 20) {
+          saveLocalDrafts(teamId, {});
+          setDraftSlots([]);
           confetti({
             particleCount: 120,
             spread: 80,
@@ -163,10 +319,10 @@ export default function TeamRosterPage({ params }: { params: Promise<{ id: strin
         <AlertCircle className="w-10 h-10 text-rose-500 mx-auto mb-2" />
         <h2 className="text-sm font-bold text-slate-900 dark:text-white">Tim Tidak Ditemukan</h2>
         <Link
-          href="/"
+          href="/dashboard"
           className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-pink-600 hover:bg-pink-500 text-white font-bold text-xs shadow-sm"
         >
-          <ArrowLeft className="w-4 h-4" /> Kembali ke Dashboard
+          <ArrowLeft className="w-4 h-4" /> Kembali ke Daftar Tim
         </Link>
       </div>
     );
@@ -182,33 +338,47 @@ export default function TeamRosterPage({ params }: { params: Promise<{ id: strin
     <div className="space-y-5 sm:space-y-6 pb-20 max-w-7xl mx-auto">
       {/* Top Header & Breadcrumb */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div>
-          <Link
-            href="/"
-            className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 dark:text-purple-300/70 hover:text-pink-600 dark:hover:text-white transition-colors mb-1.5"
-          >
-            <ArrowLeft className="w-3.5 h-3.5" /> Dashboard Liga
-          </Link>
-          <div className="flex items-center gap-3">
-            <LvmLogo variant="icon-only" size="sm" />
-            <div>
-              <h1 className="text-lg sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight uppercase">
-                {team.name}
-              </h1>
-              <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500 dark:text-purple-300/70 mt-0.5">
-                <span className="font-mono font-black text-pink-600 dark:text-pink-400">{team.teamNumber}</span>
-                <span>•</span>
-                <span>Reg. {team.region}</span>
-                <span>•</span>
-                <span className="font-bold">{team.category}</span>
-                <span>•</span>
-                <span>{team.province}</span>
-              </div>
+        <div className="flex items-center gap-3">
+          <LvmLogo variant="icon-only" size="sm" />
+          <div>
+            <h1 className="text-lg sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight uppercase">
+              {team.name}
+            </h1>
+            <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500 dark:text-purple-300/70 mt-0.5">
+              <span className="font-mono font-black text-pink-600 dark:text-pink-400">{team.teamNumber}</span>
+              <span>•</span>
+              <span>Reg. {team.region}</span>
+              <span>•</span>
+              <span className="font-bold">{team.category}</span>
+              <span>•</span>
+              <span>{team.province}</span>
             </div>
           </div>
         </div>
 
         <div className="flex items-center gap-2 pt-1 sm:pt-0">
+          <button
+            type="button"
+            onClick={handleTogglePanitiaMode}
+            className={`px-3 py-2 rounded-xl text-xs font-bold border transition-all shadow-xs flex items-center justify-center gap-1.5 cursor-pointer ${
+              isPanitiaMode
+                ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800'
+                : 'bg-white dark:bg-[#15072c] hover:bg-purple-50 dark:hover:bg-purple-900/50 text-slate-700 dark:text-purple-200 border border-purple-200 dark:border-purple-800/60'
+            }`}
+            title="Buka akses edit khusus Panitia dengan PIN"
+          >
+            {isPanitiaMode ? (
+              <>
+                <Unlock className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                <span>Mode Panitia (Aktif)</span>
+              </>
+            ) : (
+              <>
+                <Lock className="w-3.5 h-3.5 text-slate-500" />
+                <span>Mode Panitia</span>
+              </>
+            )}
+          </button>
           <Link
             href={`/teams/${team.id}`}
             className="flex-1 sm:flex-none text-center px-3.5 py-2 rounded-xl text-xs font-bold bg-white dark:bg-[#15072c] hover:bg-purple-50 dark:hover:bg-purple-900/50 text-slate-800 dark:text-purple-200 border border-purple-200 dark:border-purple-800/60 transition-all shadow-xs"
@@ -276,6 +446,7 @@ export default function TeamRosterPage({ params }: { params: Promise<{ id: strin
           {team.members.map(m => {
             const isSelected = m.slotIndex === selectedSlot;
             const isFilled = m.fullName && m.fullName.trim() !== '';
+            const isDraft = draftSlots.includes(m.slotIndex);
 
             return (
               <button
@@ -291,9 +462,11 @@ export default function TeamRosterPage({ params }: { params: Promise<{ id: strin
                 }`}
               >
                 <span>#{m.slotIndex}</span>
-                {isFilled && (
+                {isDraft ? (
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" title="Draf lokal tersimpan" />
+                ) : isFilled ? (
                   <span className={`w-1.5 h-1.5 rounded-full ${isSelected ? 'bg-white' : 'bg-emerald-500'}`} />
-                )}
+                ) : null}
               </button>
             );
           })}
@@ -320,6 +493,7 @@ export default function TeamRosterPage({ params }: { params: Promise<{ id: strin
               {team.members.slice(0, 15).map(m => {
                 const isSelected = m.slotIndex === selectedSlot;
                 const isFilled = m.fullName && m.fullName.trim() !== '';
+                const isDraft = draftSlots.includes(m.slotIndex);
 
                 return (
                   <button
@@ -360,11 +534,16 @@ export default function TeamRosterPage({ params }: { params: Promise<{ id: strin
                       </div>
                     </div>
 
-                    <div className="shrink-0 ml-1.5">
+                    <div className="shrink-0 ml-1.5 flex items-center gap-1">
+                      {isDraft && (
+                        <span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-800">
+                          Draf
+                        </span>
+                      )}
                       {isFilled ? (
                         <CheckCircle2 className={`w-3.5 h-3.5 ${isSelected ? 'text-white' : 'text-emerald-500'}`} />
                       ) : (
-                        <span className="w-1.5 h-1.5 rounded-full bg-purple-200 dark:bg-purple-800" />
+                        !isDraft && <span className="w-1.5 h-1.5 rounded-full bg-purple-200 dark:bg-purple-800" />
                       )}
                     </div>
                   </button>
@@ -389,6 +568,7 @@ export default function TeamRosterPage({ params }: { params: Promise<{ id: strin
               {team.members.slice(15, 20).map(m => {
                 const isSelected = m.slotIndex === selectedSlot;
                 const isFilled = m.fullName && m.fullName.trim() !== '';
+                const isDraft = draftSlots.includes(m.slotIndex);
 
                 return (
                   <button
@@ -425,11 +605,16 @@ export default function TeamRosterPage({ params }: { params: Promise<{ id: strin
                       </div>
                     </div>
 
-                    <div className="shrink-0 ml-1.5">
+                    <div className="shrink-0 ml-1.5 flex items-center gap-1">
+                      {isDraft && (
+                        <span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-800">
+                          Draf
+                        </span>
+                      )}
                       {isFilled ? (
                         <CheckCircle2 className={`w-3.5 h-3.5 ${isSelected ? 'text-white' : 'text-emerald-500'}`} />
                       ) : (
-                        <span className="w-1.5 h-1.5 rounded-full bg-purple-200 dark:bg-purple-800" />
+                        !isDraft && <span className="w-1.5 h-1.5 rounded-full bg-purple-200 dark:bg-purple-800" />
                       )}
                     </div>
                   </button>
@@ -465,6 +650,65 @@ export default function TeamRosterPage({ params }: { params: Promise<{ id: strin
                 </span>
               </div>
             </div>
+
+            {/* Status Kunci Formulir (Google Form Style) */}
+            {!isPanitiaMode ? (
+              <div className="mb-5 p-3.5 rounded-xl bg-amber-50/80 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-800/60 flex items-start gap-3 text-amber-900 dark:text-amber-200 text-xs">
+                <Lock className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <span className="font-bold">Formulir Pendaftaran Bersifat Final (Read-Only):</span>
+                  <p className="mt-0.5 text-amber-800 dark:text-amber-300/80 text-[11px] leading-relaxed">
+                    Sesuai ketentuan, data tim dan personel yang telah disubmit tidak dapat diubah atau dihapus secara mandiri oleh pendaftar. Jika memerlukan perbaikan data, silakan hubungi Panitia LVM.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleTogglePanitiaMode}
+                  className="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-amber-200/70 hover:bg-amber-200 dark:bg-amber-900/60 dark:hover:bg-amber-800 text-amber-950 dark:text-amber-100 shrink-0 cursor-pointer"
+                >
+                  Buka Edit (Panitia)
+                </button>
+              </div>
+            ) : (
+              <div className="mb-5 p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 flex items-center justify-between text-emerald-900 dark:text-emerald-200 text-xs">
+                <div className="flex items-center gap-2">
+                  <Unlock className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                  <span className="font-bold">Mode Edit Panitia Terbuka. Anda dapat memperbarui data personel tim ini.</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsPanitiaMode(false)}
+                  className="text-[11px] font-bold text-slate-500 hover:text-slate-800 dark:hover:text-white underline cursor-pointer"
+                >
+                  Kunci Kembali
+                </button>
+              </div>
+            )}
+
+            {/* Draft Recovery Banner */}
+            {hasSlotDraft && (
+              <div className="mb-4 p-3.5 rounded-2xl bg-purple-50/90 dark:bg-purple-950/50 border border-purple-200 dark:border-purple-800 text-xs flex items-center justify-between shadow-xs animate-fadeIn">
+                <div className="flex items-center gap-2.5 text-purple-900 dark:text-purple-200">
+                  <div className="w-7 h-7 rounded-lg bg-pink-100 dark:bg-pink-500/20 text-pink-600 dark:text-pink-400 flex items-center justify-center shrink-0">
+                    <RotateCcw className="w-3.5 h-3.5" />
+                  </div>
+                  <div>
+                    <span className="font-bold">Draf Lokal Slot #{selectedSlot} Dipulihkan:</span>
+                    <p className="text-[11px] text-purple-700 dark:text-purple-300/80 mt-0.5">
+                      Perubahan belum tersimpan berhasil dimuat otomatis dari browser. Klik simpan untuk menerapkan ke server.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleResetSlotDraft}
+                  className="text-[11px] text-rose-600 hover:text-rose-500 dark:text-rose-400 dark:hover:text-rose-300 font-bold underline shrink-0 cursor-pointer ml-3"
+                  title="Buang draf lokal dan kembalikan ke data server"
+                >
+                  Reset ke Data Server
+                </button>
+              </div>
+            )}
 
             {/* Notifications */}
             {saveSuccess && (
@@ -511,10 +755,11 @@ export default function TeamRosterPage({ params }: { params: Promise<{ id: strin
                   <input
                     type="text"
                     required
+                    disabled={!isPanitiaMode}
                     placeholder="Nama lengkap personel..."
                     value={formData.fullName || ''}
                     onChange={e => handleFormChange('fullName', e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-purple-50/50 dark:bg-[#1f0e3f] border border-purple-200/70 dark:border-purple-800/60 text-xs font-semibold text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500/30"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-purple-50/50 dark:bg-[#1f0e3f] border border-purple-200/70 dark:border-purple-800/60 text-xs font-semibold text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500/30 disabled:opacity-80 disabled:cursor-not-allowed"
                   />
                 </div>
 
@@ -525,9 +770,10 @@ export default function TeamRosterPage({ params }: { params: Promise<{ id: strin
                   </label>
                   <input
                     type="date"
+                    disabled={!isPanitiaMode}
                     value={formData.birthDate || ''}
                     onChange={e => handleFormChange('birthDate', e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-purple-50/50 dark:bg-[#1f0e3f] border border-purple-200/70 dark:border-purple-800/60 text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500/30"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-purple-50/50 dark:bg-[#1f0e3f] border border-purple-200/70 dark:border-purple-800/60 text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500/30 disabled:opacity-80 disabled:cursor-not-allowed"
                   />
                 </div>
 
@@ -538,10 +784,11 @@ export default function TeamRosterPage({ params }: { params: Promise<{ id: strin
                   </label>
                   <input
                     type="text"
+                    disabled={!isPanitiaMode}
                     placeholder="Contoh: 2108561012"
                     value={formData.nim || ''}
                     onChange={e => handleFormChange('nim', e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-purple-50/50 dark:bg-[#1f0e3f] border border-purple-200/70 dark:border-purple-800/60 text-xs font-mono font-semibold text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500/30"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-purple-50/50 dark:bg-[#1f0e3f] border border-purple-200/70 dark:border-purple-800/60 text-xs font-mono font-semibold text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500/30 disabled:opacity-80 disabled:cursor-not-allowed"
                   />
                 </div>
 
@@ -552,10 +799,11 @@ export default function TeamRosterPage({ params }: { params: Promise<{ id: strin
                   </label>
                   <input
                     type="text"
+                    disabled={!isPanitiaMode}
                     placeholder="Contoh: Fakultas Teknik"
                     value={formData.faculty || ''}
                     onChange={e => handleFormChange('faculty', e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-purple-50/50 dark:bg-[#1f0e3f] border border-purple-200/70 dark:border-purple-800/60 text-xs font-semibold text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500/30"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-purple-50/50 dark:bg-[#1f0e3f] border border-purple-200/70 dark:border-purple-800/60 text-xs font-semibold text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500/30 disabled:opacity-80 disabled:cursor-not-allowed"
                   />
                 </div>
 
@@ -566,10 +814,11 @@ export default function TeamRosterPage({ params }: { params: Promise<{ id: strin
                   </label>
                   <input
                     type="text"
+                    disabled={!isPanitiaMode}
                     placeholder="Contoh: Manajemen / Olahraga"
                     value={formData.major || ''}
                     onChange={e => handleFormChange('major', e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-purple-50/50 dark:bg-[#1f0e3f] border border-purple-200/70 dark:border-purple-800/60 text-xs font-semibold text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500/30"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-purple-50/50 dark:bg-[#1f0e3f] border border-purple-200/70 dark:border-purple-800/60 text-xs font-semibold text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500/30 disabled:opacity-80 disabled:cursor-not-allowed"
                   />
                 </div>
 
@@ -580,12 +829,13 @@ export default function TeamRosterPage({ params }: { params: Promise<{ id: strin
                   </label>
                   <input
                     type="number"
+                    disabled={!isPanitiaMode}
                     min={2018}
                     max={2026}
                     placeholder="Contoh: 2023"
                     value={formData.entryYear || ''}
                     onChange={e => handleFormChange('entryYear', e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-purple-50/50 dark:bg-[#1f0e3f] border border-purple-200/70 dark:border-purple-800/60 text-xs font-semibold text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500/30"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-purple-50/50 dark:bg-[#1f0e3f] border border-purple-200/70 dark:border-purple-800/60 text-xs font-semibold text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500/30 disabled:opacity-80 disabled:cursor-not-allowed"
                   />
                 </div>
 
@@ -595,9 +845,10 @@ export default function TeamRosterPage({ params }: { params: Promise<{ id: strin
                     POSISI DALAM TEAM
                   </label>
                   <select
+                    disabled={!isPanitiaMode}
                     value={formData.teamRole || (isPlayerSlot ? 'Pemain' : 'Team Manager')}
                     onChange={e => handleFormChange('teamRole', e.target.value as TeamRole)}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-purple-50/50 dark:bg-[#1f0e3f] border border-purple-200/70 dark:border-purple-800/60 text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-pink-500"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-purple-50/50 dark:bg-[#1f0e3f] border border-purple-200/70 dark:border-purple-800/60 text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-pink-500 disabled:opacity-80 disabled:cursor-not-allowed"
                   >
                     <option value="Pemain">Pemain (15 Kuota)</option>
                     <option value="Team Manager">Team Manager (1 Kuota)</option>
@@ -616,10 +867,11 @@ export default function TeamRosterPage({ params }: { params: Promise<{ id: strin
                       </label>
                       <input
                         type="text"
+                        disabled={!isPanitiaMode}
                         placeholder="Contoh: 7, 10, 14"
                         value={formData.jerseyNumber || ''}
                         onChange={e => handleFormChange('jerseyNumber', e.target.value)}
-                        className="w-full px-3.5 py-2.5 rounded-xl bg-purple-50/50 dark:bg-[#1f0e3f] border border-purple-200/70 dark:border-purple-800/60 text-xs font-mono font-black text-pink-600 dark:text-pink-400 placeholder-slate-400 focus:outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500/30"
+                        className="w-full px-3.5 py-2.5 rounded-xl bg-purple-50/50 dark:bg-[#1f0e3f] border border-purple-200/70 dark:border-purple-800/60 text-xs font-mono font-black text-pink-600 dark:text-pink-400 placeholder-slate-400 focus:outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500/30 disabled:opacity-80 disabled:cursor-not-allowed"
                       />
                     </div>
 
@@ -628,9 +880,10 @@ export default function TeamRosterPage({ params }: { params: Promise<{ id: strin
                         POSISI BERMAIN
                       </label>
                       <select
+                        disabled={!isPanitiaMode}
                         value={formData.position || '-'}
                         onChange={e => handleFormChange('position', e.target.value as PlayingPosition)}
-                        className="w-full px-3.5 py-2.5 rounded-xl bg-purple-50/50 dark:bg-[#1f0e3f] border border-purple-200/70 dark:border-purple-800/60 text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-pink-500"
+                        className="w-full px-3.5 py-2.5 rounded-xl bg-purple-50/50 dark:bg-[#1f0e3f] border border-purple-200/70 dark:border-purple-800/60 text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-pink-500 disabled:opacity-80 disabled:cursor-not-allowed"
                       >
                         <option value="-">- Pilih Posisi Bermain -</option>
                         {PLAYING_POSITIONS.map(pos => (
@@ -647,12 +900,13 @@ export default function TeamRosterPage({ params }: { params: Promise<{ id: strin
                       </label>
                       <input
                         type="number"
+                        disabled={!isPanitiaMode}
                         min={140}
                         max={220}
                         placeholder="Contoh: 185"
                         value={formData.height || ''}
                         onChange={e => handleFormChange('height', Number(e.target.value) || undefined)}
-                        className="w-full px-3.5 py-2.5 rounded-xl bg-purple-50/50 dark:bg-[#1f0e3f] border border-purple-200/70 dark:border-purple-800/60 text-xs font-semibold text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500/30"
+                        className="w-full px-3.5 py-2.5 rounded-xl bg-purple-50/50 dark:bg-[#1f0e3f] border border-purple-200/70 dark:border-purple-800/60 text-xs font-semibold text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500/30 disabled:opacity-80 disabled:cursor-not-allowed"
                       />
                     </div>
 
@@ -662,12 +916,13 @@ export default function TeamRosterPage({ params }: { params: Promise<{ id: strin
                       </label>
                       <input
                         type="number"
+                        disabled={!isPanitiaMode}
                         min={40}
                         max={140}
                         placeholder="Contoh: 78"
                         value={formData.weight || ''}
                         onChange={e => handleFormChange('weight', Number(e.target.value) || undefined)}
-                        className="w-full px-3.5 py-2.5 rounded-xl bg-purple-50/50 dark:bg-[#1f0e3f] border border-purple-200/70 dark:border-purple-800/60 text-xs font-semibold text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500/30"
+                        className="w-full px-3.5 py-2.5 rounded-xl bg-purple-50/50 dark:bg-[#1f0e3f] border border-purple-200/70 dark:border-purple-800/60 text-xs font-semibold text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500/30 disabled:opacity-80 disabled:cursor-not-allowed"
                       />
                     </div>
                   </>
@@ -681,46 +936,80 @@ export default function TeamRosterPage({ params }: { params: Promise<{ id: strin
                   <PhotoUpload
                     currentPhotoUrl={formData.photoUrl}
                     onPhotoUploaded={url => handleFormChange('photoUrl', url)}
+                    disabled={!isPanitiaMode}
                   />
                 </div>
               </div>
 
               {/* Action Buttons */}
               <div className="pt-4 border-t border-purple-50 dark:border-purple-950 flex flex-col sm:flex-row items-center justify-between gap-3">
-                <button
-                  type="button"
-                  onClick={() => handleSaveMember()}
-                  disabled={saving}
-                  className="w-full sm:w-auto px-4 py-2.5 rounded-xl font-bold text-xs bg-purple-50 hover:bg-purple-100 dark:bg-purple-950/60 dark:hover:bg-purple-900/60 text-purple-700 dark:text-purple-200 border border-purple-200 dark:border-purple-800 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
-                >
-                  <Save className="w-3.5 h-3.5 text-pink-500" />
-                  {saving ? 'Menyimpan...' : 'Simpan Slot Ini'}
-                </button>
+                {!isPanitiaMode ? (
+                  <>
+                    <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-purple-300/80">
+                      <Lock className="w-3.5 h-3.5 text-amber-500" />
+                      <span>Formulir Terkunci (Mode Lihat). Aktifkan Mode Panitia untuk mengedit.</span>
+                    </div>
 
-                <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-                  {selectedSlot > 1 && (
+                    <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                      {selectedSlot > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => setSelectedSlot(selectedSlot - 1)}
+                          className="px-3.5 py-2.5 rounded-xl text-xs font-semibold bg-white dark:bg-[#1f0e3f] text-slate-700 dark:text-purple-200 border border-purple-200 dark:border-purple-800 hover:bg-purple-50 cursor-pointer"
+                        >
+                          ← Slot #{selectedSlot - 1}
+                        </button>
+                      )}
+
+                      {selectedSlot < 20 && (
+                        <button
+                          type="button"
+                          onClick={() => setSelectedSlot(selectedSlot + 1)}
+                          className="px-4 py-2.5 rounded-xl text-xs font-bold bg-purple-600 hover:bg-purple-500 text-white shadow-xs transition-all cursor-pointer"
+                        >
+                          Slot #{selectedSlot + 1} →
+                        </button>
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  <>
                     <button
                       type="button"
-                      onClick={() => setSelectedSlot(selectedSlot - 1)}
-                      className="px-3.5 py-2.5 rounded-xl text-xs font-semibold bg-white dark:bg-[#1f0e3f] text-slate-700 dark:text-purple-200 border border-purple-200 dark:border-purple-800 hover:bg-purple-50"
+                      onClick={() => handleSaveMember()}
+                      disabled={saving}
+                      className="w-full sm:w-auto px-4 py-2.5 rounded-xl font-bold text-xs bg-purple-50 hover:bg-purple-100 dark:bg-purple-950/60 dark:hover:bg-purple-900/60 text-purple-700 dark:text-purple-200 border border-purple-200 dark:border-purple-800 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
                     >
-                      ← Slot #{selectedSlot - 1}
+                      <Save className="w-3.5 h-3.5 text-pink-500" />
+                      {saving ? 'Menyimpan...' : 'Simpan Slot Ini'}
                     </button>
-                  )}
 
-                  <button
-                    type="submit"
-                    disabled={saving}
-                    className="w-full sm:w-auto px-5 py-2.5 rounded-xl font-black text-xs uppercase tracking-wider bg-pink-600 hover:bg-pink-500 text-white shadow-md active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
-                  >
-                    <Save className="w-3.5 h-3.5 stroke-[2.5]" />
-                    <span>
-                      {selectedSlot < 20
-                        ? `Simpan & Lanjut ke Slot #${selectedSlot + 1} →`
-                        : 'Simpan Slot Terakhir (20/20)'}
-                    </span>
-                  </button>
-                </div>
+                    <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                      {selectedSlot > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => setSelectedSlot(selectedSlot - 1)}
+                          className="px-3.5 py-2.5 rounded-xl text-xs font-semibold bg-white dark:bg-[#1f0e3f] text-slate-700 dark:text-purple-200 border border-purple-200 dark:border-purple-800 hover:bg-purple-50 cursor-pointer"
+                        >
+                          ← Slot #{selectedSlot - 1}
+                        </button>
+                      )}
+
+                      <button
+                        type="submit"
+                        disabled={saving}
+                        className="w-full sm:w-auto px-5 py-2.5 rounded-xl font-black text-xs uppercase tracking-wider bg-pink-600 hover:bg-pink-500 text-white shadow-md active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                      >
+                        <Save className="w-3.5 h-3.5 stroke-[2.5]" />
+                        <span>
+                          {selectedSlot < 20
+                            ? `Simpan & Lanjut ke Slot #${selectedSlot + 1} →`
+                            : 'Simpan Slot Terakhir (20/20)'}
+                        </span>
+                      </button>
+                    </div>
+                  </>
+                )}
               </div>
             </form>
           </div>

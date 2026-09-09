@@ -2,12 +2,22 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
 export function proxy(request: NextRequest) {
-  const isProduction =
-    process.env.NODE_ENV === 'production' ||
-    process.env.NEXT_PUBLIC_PRODUCTION_MODE === 'true';
+  const envConfig = process.env.NEXT_PUBLIC_PRODUCTION_MODE;
+  // If explicitly set, respect the setting ('true' or 'false').
+  // Only fallback to checking NODE_ENV if NEXT_PUBLIC_PRODUCTION_MODE is undefined or empty.
+  const isHolding =
+    envConfig !== undefined && envConfig !== ''
+      ? envConfig === 'true'
+      : process.env.NODE_ENV === 'production';
 
-  // In non-production, allow normal access
-  if (!isProduction) {
+  // In non-production or when holding mode is disabled, allow normal access
+  if (!isHolding) {
+    return NextResponse.next();
+  }
+
+  // Allow access if user has bypassed the holding display
+  const bypassCookie = request.cookies.get('lvm_portal_bypass');
+  if (bypassCookie?.value === '1') {
     return NextResponse.next();
   }
 
@@ -18,7 +28,7 @@ export function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // In production, block API requests completely
+  // In production holding mode, block API requests completely
   if (pathname.startsWith('/api')) {
     return NextResponse.json(
       { error: 'Not Found' },
@@ -26,7 +36,7 @@ export function proxy(request: NextRequest) {
     );
   }
 
-  // In production, redirect all other page requests (/register, /reports, /teams, etc.) back to /
+  // In production holding mode, redirect all other page requests (/register, /reports, /teams, etc.) back to /
   return NextResponse.redirect(new URL('/', request.url));
 }
 

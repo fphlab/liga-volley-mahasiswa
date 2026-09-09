@@ -70,6 +70,10 @@ returns trigger as $$
 declare
   team_count int;
 begin
+  -- Kunci transaksi tingkat PostgreSQL (Advisory Lock) berbasis kombinasi region & category
+  -- untuk mencegah race condition / TOCTOU saat pendaftaran serentak di milidetik yang sama
+  perform pg_advisory_xact_lock(hashtext(new.region || ':' || new.category));
+
   select count(*) into team_count
   from public.teams
   where region = new.region and category = new.category;
@@ -119,8 +123,45 @@ create trigger members_touch_updated_at
 alter table public.teams   enable row level security;
 alter table public.members enable row level security;
 
+-- ------------------------------------------------------------
+-- 6. STORAGE (Supabase Storage Bucket & Kebijakan Akses)
+--    Bucket 'player-photos' dibuat publik agar foto jersey pemain
+--    dapat ditampilkan langsung pada antarmuka web.
+-- ------------------------------------------------------------
+do $$
+begin
+  if exists (
+    select 1 from information_schema.schemata where schema_name = 'storage'
+  ) then
+    insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+    values (
+      'player-photos',
+      'player-photos',
+      true,
+      5242880,
+      array['image/jpeg', 'image/png', 'image/webp']
+    )
+    on conflict (id) do update set
+      public = true,
+      file_size_limit = 5242880,
+      allowed_mime_types = array['image/jpeg', 'image/png', 'image/webp'];
+
+    if not exists (
+      select 1 from pg_policies 
+      where schemaname = 'storage' 
+        and tablename = 'objects' 
+        and policyname = 'Public Access player-photos'
+    ) then
+      create policy "Public Access player-photos"
+      on storage.objects for select
+      using (bucket_id = 'player-photos');
+    end if;
+  end if;
+end $$;
+
 -- ============================================================
 -- SELESAI. Verifikasi cepat:
 --   select * from public.teams limit 5;
 --   select count(*) from public.members;
 -- ============================================================
+

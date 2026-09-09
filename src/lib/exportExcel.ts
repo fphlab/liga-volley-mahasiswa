@@ -9,6 +9,21 @@ const XLSX_MIME_TYPE = 'application/vnd.openxmlformats-officedocument.spreadshee
 
 type ReportRow = Record<string, string | number>;
 
+/**
+ * Mencegah Formula / CSV / DDE Injection di Excel (CWE-1236).
+ * Jika sel diawali karakter formula (=, +, -, @, tab, newline), beri awalan petik tunggal (')
+ * agar Microsoft Excel memperlakukannya sebagai teks statis murni, bukan formula eksekusi.
+ */
+function sanitizeCellValue(value: unknown): string | number {
+  if (typeof value === 'number') return value;
+  if (value === null || value === undefined) return '-';
+  const str = String(value).trim();
+  if (/^[=+\-@\t\r]/.test(str)) {
+    return `'${str}`;
+  }
+  return str || '-';
+}
+
 function buildWorksheet(worksheet: ExcelJS.Worksheet, rows: ReportRow[]): void {
   if (rows.length === 0) return;
 
@@ -17,7 +32,13 @@ function buildWorksheet(worksheet: ExcelJS.Worksheet, rows: ReportRow[]): void {
   // Header kolom tebal agar konsisten dengan lembar laporan resmi
   worksheet.getRow(1).font = { bold: true };
 
-  rows.forEach(row => worksheet.addRow(row));
+  rows.forEach(row => {
+    const sanitizedRow: ReportRow = {};
+    for (const [k, v] of Object.entries(row)) {
+      sanitizedRow[k] = sanitizeCellValue(v);
+    }
+    worksheet.addRow(sanitizedRow);
+  });
 }
 
 async function downloadWorkbook(workbook: ExcelJS.Workbook, filename: string): Promise<void> {
@@ -91,8 +112,8 @@ export async function exportReport2ToExcel(teams: Team[], filename = 'Report_2_V
 
 export async function exportReport3ToExcel(teams: Team[], filename = 'Report_3_Daftar_Tim_dan_Regional.xlsx'): Promise<void> {
   const rows: ReportRow[] = teams.map((t, idx) => {
-    const playerCount = t.members.filter(m => m.teamRole === 'Pemain' && m.fullName.trim() !== '').length;
-    const officialCount = t.members.filter(m => m.teamRole !== 'Pemain' && m.fullName.trim() !== '').length;
+    const playerCount = t.members.filter(m => m.teamRole === 'Pemain' && (m.fullName || '').trim() !== '').length;
+    const officialCount = t.members.filter(m => m.teamRole !== 'Pemain' && (m.fullName || '').trim() !== '').length;
     return {
       'No': idx + 1,
       'No Urut Team': t.teamNumber,

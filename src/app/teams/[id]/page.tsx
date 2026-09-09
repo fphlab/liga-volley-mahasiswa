@@ -3,7 +3,6 @@
 import React, { useState, useEffect, use, useCallback } from 'react';
 import Link from 'next/link';
 import {
-  ArrowLeft,
   Edit3,
   Printer,
   Users,
@@ -43,21 +42,71 @@ export default function TeamDetailPage({ params }: { params: Promise<{ id: strin
     fetchTeam();
   }, [fetchTeam]);
 
+  const getAdminKey = async (): Promise<string | null> => {
+    const saved = typeof window !== 'undefined' ? sessionStorage.getItem('lvm_admin_key') : null;
+    if (saved) {
+      try {
+        const check = await fetch('/api/auth/verify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pin: saved }),
+        });
+        const data = await check.json();
+        if (data.valid) return saved;
+      } catch {}
+      sessionStorage.removeItem('lvm_admin_key');
+    }
+
+    const input = prompt('Aksi ini memerlukan verifikasi Panitia. Masukkan PIN Panitia:');
+    if (!input || !input.trim()) return null;
+
+    try {
+      const res = await fetch('/api/auth/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pin: input.trim() }),
+      });
+      const data = await res.json();
+      if (data.valid) {
+        sessionStorage.setItem('lvm_admin_key', input.trim());
+        return input.trim();
+      } else {
+        sessionStorage.removeItem('lvm_admin_key');
+        alert(data.error || 'PIN Panitia salah! Akses ditolak.');
+        return null;
+      }
+    } catch {
+      alert('Gagal memverifikasi PIN Panitia.');
+      return null;
+    }
+  };
+
   const handleVerifyTeam = async () => {
-    if (!confirm('Verifikasi data tim ini? Status akan berubah menjadi Terverifikasi.')) {
+    const adminKey = await getAdminKey();
+    if (!adminKey) {
+      return;
+    }
+
+    if (!confirm('[PANITIA] Verifikasi data tim ini? Status akan berubah menjadi Terverifikasi.')) {
       return;
     }
     try {
       setVerifying(true);
       const res = await fetch(`/api/teams/${teamId}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-key': adminKey,
+        },
         body: JSON.stringify({ status: 'Terverifikasi' }),
       });
       const data = await res.json();
       if (data.success && data.team) {
         setTeam(data.team);
       } else {
+        if (res.status === 401) {
+          sessionStorage.removeItem('lvm_admin_key');
+        }
         alert(data.error || 'Gagal memverifikasi tim');
       }
     } catch (err) {
@@ -82,10 +131,10 @@ export default function TeamDetailPage({ params }: { params: Promise<{ id: strin
       <div className="text-center py-16 bg-white dark:bg-[#15072c] border border-purple-100 dark:border-purple-900/60 rounded-2xl p-6 max-w-md mx-auto">
         <h2 className="text-base font-bold text-slate-900 dark:text-white">Tim Tidak Ditemukan</h2>
         <Link
-          href="/"
+          href="/dashboard"
           className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-pink-600 hover:bg-pink-500 text-white text-xs font-bold shadow-sm"
         >
-          Kembali ke Dashboard
+          Kembali ke Daftar Tim
         </Link>
       </div>
     );
@@ -99,21 +148,13 @@ export default function TeamDetailPage({ params }: { params: Promise<{ id: strin
     <div className="space-y-6 pb-20 max-w-7xl mx-auto">
       {/* Header Banner */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 print:hidden">
-        <div>
-          <Link
-            href="/"
-            className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 dark:text-purple-300/70 hover:text-pink-600 dark:hover:text-white transition-colors mb-2"
-          >
-            <ArrowLeft className="w-4 h-4" /> Kembali ke Dashboard
-          </Link>
-          <div className="flex items-center gap-3">
-            <LvmLogo variant="icon-only" size="sm" />
-            <div>
-              <h1 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight uppercase">{team.name}</h1>
-              <p className="text-xs text-slate-500 dark:text-purple-300/70 mt-0.5">
-                Nomor Daftar: <strong className="text-pink-600 dark:text-pink-400 font-mono font-black">{team.teamNumber}</strong> • {team.province} (Regional {team.region})
-              </p>
-            </div>
+        <div className="flex items-center gap-3">
+          <LvmLogo variant="icon-only" size="sm" />
+          <div>
+            <h1 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight uppercase">{team.name}</h1>
+            <p className="text-xs text-slate-500 dark:text-purple-300/70 mt-0.5">
+              Nomor Daftar: <strong className="text-pink-600 dark:text-pink-400 font-mono font-black">{team.teamNumber}</strong> • {team.province} (Regional {team.region})
+            </p>
           </div>
         </div>
 
@@ -157,6 +198,12 @@ export default function TeamDetailPage({ params }: { params: Promise<{ id: strin
 
       {/* Official Printable Header */}
       <div className="hidden print:block text-center border-b-2 border-slate-900 pb-3 mb-4">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="/lvm-logo.png"
+          alt="Logo Liga Voli Mahasiswa"
+          className="h-14 w-auto mx-auto mb-2 object-contain"
+        />
         <h2 className="text-lg font-black uppercase text-black">
           LIGA VOLI MAHASISWA (LVM)
         </h2>

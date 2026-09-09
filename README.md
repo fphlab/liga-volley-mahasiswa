@@ -22,6 +22,7 @@ Skema ini membuat:
 | Unique index parsial | Anti nomor jersey ganda antar pemain dalam satu tim |
 | Trigger `enforce_team_quota` | Kuota maks 6 tim per regional × kategori — ditegakkan di level DB |
 | Trigger `touch_updated_at` | Kolom `updated_at` otomatis |
+| Bucket `player-photos` | Supabase Storage bucket publik untuk foto jersey pemain |
 
 ### Opsi A — PostgreSQL lokal (development)
 
@@ -95,5 +96,6 @@ data/volleyball_data.json            # Sumber data lama (untuk migrasi saja)
 
 ## Catatan
 
-- Foto pemain masih disimpan ke `public/uploads/`. Untuk deployment produksi sebaiknya dimigrasikan ke **Supabase Storage**.
+- Foto pemain diunggah langsung ke **Supabase Storage** (bucket `player-photos`) ketika Supabase aktif, dengan fallback ke `public/uploads/` bila memakai Postgres lokal (offline).
 - Nomor jersey kosong/official disimpan `NULL`; keunikan hanya ditegakkan antar pemain berjersey dalam satu tim.
+

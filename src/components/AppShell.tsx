@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect } from 'react';
+import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import Navbar from '@/components/Navbar';
 import LvmLogo from '@/components/LvmLogo';
@@ -34,24 +35,30 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-6">
         {children}
       </main>
-      <footer className="relative border-t border-purple-100 dark:border-purple-950/80 bg-white/80 dark:bg-[#120624]/90 backdrop-blur-md py-8 text-center text-xs text-slate-500 dark:text-purple-300/70 print:hidden mt-14 transition-colors">
+      <footer className="relative border-t border-purple-100 dark:border-purple-950/80 bg-white/80 dark:bg-[#120624]/90 backdrop-blur-md py-5 sm:py-6 text-xs text-slate-500 dark:text-purple-300/70 print:hidden mt-14 transition-colors">
         {/* Top Accent Neon Line */}
         <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-pink-500 to-transparent opacity-80" />
         
-        <div className="max-w-7xl mx-auto px-4 flex flex-col items-center gap-3">
-          <div className="flex items-center gap-2.5">
-            <LvmLogo variant="icon-only" size="sm" />
-            <span className="font-black italic uppercase tracking-wider text-slate-900 dark:text-white text-sm">
-              LIGA VOLI MAHASISWA
-            </span>
-          </div>
+        <div className="max-w-7xl mx-auto px-4 flex items-center justify-center gap-3 sm:gap-4 text-left">
+          <Link
+            href="/"
+            className="inline-flex items-center shrink-0 group p-1 rounded-xl bg-[#180838] dark:bg-transparent border border-purple-800/40 dark:border-transparent transition-all shadow-xs"
+          >
+            <LvmLogo variant="badge" size="md" />
+          </Link>
 
-          <div className="space-y-1 max-w-2xl">
-            <p className="font-bold text-slate-700 dark:text-purple-200 tracking-wide text-xs">
-              REGISTRASI RESMI 36 TIM (18 PUTRA & 18 PUTRI) • 20 PERSONEL PER TIM
-            </p>
-            <p className="text-slate-500 dark:text-purple-400/60 text-[11px]">
-              Regional Barat (DKI Jakarta, Jawa Barat, Banten) • Regional Tengah (Jawa Tengah, DI Yogyakarta) • Regional Timur (Jawa Timur, Bali)
+          <div className="space-y-0.5">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-0.5 sm:gap-2">
+              <span className="font-black text-slate-800 dark:text-purple-100 tracking-wider text-xs uppercase">
+                Liga Volley Mahasiswa (LVM)
+              </span>
+              <span className="hidden sm:inline text-purple-300 dark:text-purple-800">•</span>
+              <span className="text-[11px] text-slate-500 dark:text-purple-300/70">
+                Portal Resmi Manajemen Pendaftaran &amp; Sistem Informasi Kejuaraan
+              </span>
+            </div>
+            <p className="text-slate-400 dark:text-purple-400/50 text-[10px]">
+              &copy; {new Date().getFullYear()} Liga Volley Mahasiswa. Hak Cipta Dilindungi.
             </p>
           </div>
         </div>
