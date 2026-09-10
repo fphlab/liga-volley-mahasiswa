@@ -103,6 +103,17 @@ export default function TeamRosterPage({ params }: { params: Promise<{ id: strin
       .then(data => {
         if (data.success && data.team) {
           setTeam(data.team);
+          const drafts = getLocalDrafts(teamId);
+          const slotDraft = drafts[selectedSlot];
+          const currentMember = data.team.members.find((m: Member) => m.slotIndex === selectedSlot);
+
+          if (slotDraft && Object.keys(slotDraft).length > 0) {
+            setFormData(slotDraft);
+            setHasSlotDraft(true);
+          } else if (currentMember) {
+            setFormData(currentMember);
+            setHasSlotDraft(false);
+          }
         } else {
           setErrorMessage(data.error || 'Tim tidak ditemukan');
         }
@@ -114,7 +125,7 @@ export default function TeamRosterPage({ params }: { params: Promise<{ id: strin
       .finally(() => {
         setLoading(false);
       });
-  }, [teamId]);
+  }, [teamId, selectedSlot]);
 
   useEffect(() => {
     fetchTeam();
@@ -129,31 +140,28 @@ export default function TeamRosterPage({ params }: { params: Promise<{ id: strin
     return () => clearTimeout(timer);
   }, [teamId]);
 
-  // Sync formData and draft when slot or team changes
-  useEffect(() => {
-    if (!team) return;
-    const currentMember = team.members.find(m => m.slotIndex === selectedSlot);
-    if (!currentMember) return;
-
-    const timer = setTimeout(() => {
+  // Ganti slot secara instan & sinkron untuk mencegah glitch/kedipan data slot lama
+  const switchSlot = useCallback((slotIdx: number, customTeam?: Team | null) => {
+    setSelectedSlot(slotIdx);
+    const activeTeam = customTeam || team;
+    if (activeTeam) {
       const drafts = getLocalDrafts(teamId);
-      const slotDraft = drafts[selectedSlot];
+      const slotDraft = drafts[slotIdx];
+      const member = activeTeam.members.find(m => m.slotIndex === slotIdx);
 
       if (slotDraft && Object.keys(slotDraft).length > 0) {
         setFormData(slotDraft);
         setHasSlotDraft(true);
-      } else {
-        setFormData(currentMember);
+      } else if (member) {
+        setFormData(member);
         setHasSlotDraft(false);
       }
-      setErrorMessage(null);
-    }, 0);
-
-    return () => clearTimeout(timer);
-  }, [team, selectedSlot, teamId]);
+    }
+    setErrorMessage(null);
+  }, [team, teamId]);
 
   const handleSelectSlot = (slotIdx: number) => {
-    setSelectedSlot(slotIdx);
+    switchSlot(slotIdx);
   };
 
   const handleFormChange = (field: keyof Member, value: Member[keyof Member]) => {
@@ -244,15 +252,28 @@ export default function TeamRosterPage({ params }: { params: Promise<{ id: strin
         headers['x-admin-key'] = adminKey;
       }
 
+      const isOfficial = selectedSlot > 15 || formData.teamRole !== 'Pemain';
+      const updatesToSend: Partial<Member> = {
+        ...formData,
+        slotIndex: selectedSlot,
+      };
+
+      // Untuk official tim: data akademik & atribut permainan pemain distandarisasi '-'
+      if (isOfficial) {
+        updatesToSend.nim = formData.nim || '-';
+        updatesToSend.faculty = formData.faculty || '-';
+        updatesToSend.major = formData.major || '-';
+        updatesToSend.entryYear = formData.entryYear || '-';
+        updatesToSend.jerseyNumber = '';
+        updatesToSend.position = '-';
+      }
+
       const res = await fetch(`/api/teams/${teamId}/members`, {
         method: 'PUT',
         headers,
         body: JSON.stringify({
           memberId: currentMember.id,
-          updates: {
-            ...formData,
-            slotIndex: selectedSlot,
-          },
+          updates: updatesToSend,
         }),
       });
 
@@ -362,7 +383,7 @@ export default function TeamRosterPage({ params }: { params: Promise<{ id: strin
     const success = await handleSaveMember();
     if (success) {
       if (selectedSlot < 20) {
-        setSelectedSlot(selectedSlot + 1);
+        switchSlot(selectedSlot + 1);
       } else if (team?.status === 'Draft') {
         handleFinalizeSubmission();
       }
@@ -814,7 +835,7 @@ export default function TeamRosterPage({ params }: { params: Promise<{ id: strin
             )}
 
             {/* Form Fields */}
-            <form onSubmit={handleSaveAndNext} className="space-y-4">
+            <form onSubmit={handleSaveAndNext} noValidate className="space-y-4">
               {/* Header Info */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3.5 rounded-xl bg-purple-50/50 dark:bg-[#1f0e3f] border border-purple-200/70 dark:border-purple-800/60 text-xs">
                 <div>
@@ -865,90 +886,99 @@ export default function TeamRosterPage({ params }: { params: Promise<{ id: strin
                   />
                 </div>
 
-                {/* Nomor Induk Mahasiswa (NIM) */}
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-purple-200 mb-1">
-                    NOMOR INDUK MAHASISWA (NIM) {isPlayerSlot && <span className="text-pink-500">*</span>}
-                  </label>
-                  <input
-                    type="text"
-                    disabled={!isEditable}
-                    placeholder="Contoh: 2108561012"
-                    value={formData.nim || ''}
-                    onChange={e => handleFormChange('nim', e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-purple-50/50 dark:bg-[#1f0e3f] border border-purple-200/70 dark:border-purple-800/60 text-xs font-mono font-semibold text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500/30 disabled:opacity-80 disabled:cursor-not-allowed"
-                  />
-                </div>
-
-                {/* Fakultas */}
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-purple-200 mb-1">
-                    FAKULTAS
-                  </label>
-                  <input
-                    type="text"
-                    disabled={!isEditable}
-                    placeholder="Contoh: Fakultas Teknik"
-                    value={formData.faculty || ''}
-                    onChange={e => handleFormChange('faculty', e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-purple-50/50 dark:bg-[#1f0e3f] border border-purple-200/70 dark:border-purple-800/60 text-xs font-semibold text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500/30 disabled:opacity-80 disabled:cursor-not-allowed"
-                  />
-                </div>
-
-                {/* Jurusan */}
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-purple-200 mb-1">
-                    JURUSAN / PROGRAM STUDI
-                  </label>
-                  <input
-                    type="text"
-                    disabled={!isEditable}
-                    placeholder="Contoh: Manajemen / Olahraga"
-                    value={formData.major || ''}
-                    onChange={e => handleFormChange('major', e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-purple-50/50 dark:bg-[#1f0e3f] border border-purple-200/70 dark:border-purple-800/60 text-xs font-semibold text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500/30 disabled:opacity-80 disabled:cursor-not-allowed"
-                  />
-                </div>
-
-                {/* Tahun Masuk (Angkatan) */}
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-purple-200 mb-1">
-                    TAHUN MASUK (ANGKATAN)
-                  </label>
-                  <input
-                    type="number"
-                    disabled={!isEditable}
-                    min={2018}
-                    max={2026}
-                    placeholder="Contoh: 2023"
-                    value={formData.entryYear || ''}
-                    onChange={e => handleFormChange('entryYear', e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-purple-50/50 dark:bg-[#1f0e3f] border border-purple-200/70 dark:border-purple-800/60 text-xs font-semibold text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500/30 disabled:opacity-80 disabled:cursor-not-allowed"
-                  />
-                </div>
-
                 {/* Posisi Dalam Team (Role) */}
                 <div>
                   <label className="block text-xs font-bold text-slate-700 dark:text-purple-200 mb-1">
                     POSISI DALAM TEAM
                   </label>
                   <select
-                    disabled={!isEditable}
+                    disabled={!isEditable || isPlayerSlot}
                     value={formData.teamRole || (isPlayerSlot ? 'Pemain' : 'Team Manager')}
                     onChange={e => handleFormChange('teamRole', e.target.value as TeamRole)}
                     className="w-full px-3.5 py-2.5 rounded-xl bg-purple-50/50 dark:bg-[#1f0e3f] border border-purple-200/70 dark:border-purple-800/60 text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-pink-500 disabled:opacity-80 disabled:cursor-not-allowed"
                   >
-                    <option value="Pemain">Pemain (15 Kuota)</option>
-                    <option value="Team Manager">Team Manager (1 Kuota)</option>
-                    <option value="Head Coach">Head Coach (1 Kuota)</option>
-                    <option value="Assistant Pelatih">Assistant Pelatih (2 Kuota)</option>
-                    <option value="Utilities">Utilities (1 Kuota)</option>
+                    {isPlayerSlot ? (
+                      <option value="Pemain">Pemain (Slot #{selectedSlot})</option>
+                    ) : (
+                      <>
+                        <option value="Team Manager">Team Manager (1 Kuota)</option>
+                        <option value="Head Coach">Head Coach (1 Kuota)</option>
+                        <option value="Assistant Pelatih">Assistant Pelatih (2 Kuota)</option>
+                        <option value="Utilities">Utilities (1 Kuota)</option>
+                      </>
+                    )}
                   </select>
                 </div>
 
-                {/* Fields Khusus Pemain */}
-                {isPlayerSlot && (
+                {/* Bagian Khusus Pemain (Akademik & Pertandingan) */}
+                {isPlayerSlot ? (
                   <>
+                    {/* Nomor Induk Mahasiswa (NIM) */}
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 dark:text-purple-200 mb-1">
+                        NOMOR INDUK MAHASISWA (NIM) <span className="text-pink-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        disabled={!isEditable}
+                        placeholder="Contoh: 2108561012"
+                        value={formData.nim || ''}
+                        onChange={e => handleFormChange('nim', e.target.value)}
+                        className="w-full px-3.5 py-2.5 rounded-xl bg-purple-50/50 dark:bg-[#1f0e3f] border border-purple-200/70 dark:border-purple-800/60 text-xs font-mono font-semibold text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500/30 disabled:opacity-80 disabled:cursor-not-allowed"
+                      />
+                    </div>
+
+                    {/* Tahun Masuk (Angkatan) */}
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 dark:text-purple-200 mb-1">
+                        TAHUN MASUK (ANGKATAN)
+                      </label>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        maxLength={4}
+                        disabled={!isEditable}
+                        placeholder="Contoh: 2023"
+                        value={formData.entryYear === '-' ? '' : (formData.entryYear || '')}
+                        onChange={e => {
+                          const val = e.target.value.replace(/[^0-9]/g, '');
+                          handleFormChange('entryYear', val);
+                        }}
+                        className="w-full px-3.5 py-2.5 rounded-xl bg-purple-50/50 dark:bg-[#1f0e3f] border border-purple-200/70 dark:border-purple-800/60 text-xs font-semibold text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500/30 disabled:opacity-80 disabled:cursor-not-allowed"
+                      />
+                    </div>
+
+                    {/* Fakultas */}
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 dark:text-purple-200 mb-1">
+                        FAKULTAS
+                      </label>
+                      <input
+                        type="text"
+                        disabled={!isEditable}
+                        placeholder="Contoh: Fakultas Teknik"
+                        value={formData.faculty || ''}
+                        onChange={e => handleFormChange('faculty', e.target.value)}
+                        className="w-full px-3.5 py-2.5 rounded-xl bg-purple-50/50 dark:bg-[#1f0e3f] border border-purple-200/70 dark:border-purple-800/60 text-xs font-semibold text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500/30 disabled:opacity-80 disabled:cursor-not-allowed"
+                      />
+                    </div>
+
+                    {/* Jurusan */}
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 dark:text-purple-200 mb-1">
+                        JURUSAN / PROGRAM STUDI
+                      </label>
+                      <input
+                        type="text"
+                        disabled={!isEditable}
+                        placeholder="Contoh: Manajemen / Olahraga"
+                        value={formData.major || ''}
+                        onChange={e => handleFormChange('major', e.target.value)}
+                        className="w-full px-3.5 py-2.5 rounded-xl bg-purple-50/50 dark:bg-[#1f0e3f] border border-purple-200/70 dark:border-purple-800/60 text-xs font-semibold text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500/30 disabled:opacity-80 disabled:cursor-not-allowed"
+                      />
+                    </div>
+
+                    {/* Nomor Jersey */}
                     <div>
                       <label className="block text-xs font-bold text-slate-700 dark:text-purple-200 mb-1">
                         NOMOR JERSEY <span className="text-pink-500">*</span>
@@ -963,6 +993,7 @@ export default function TeamRosterPage({ params }: { params: Promise<{ id: strin
                       />
                     </div>
 
+                    {/* Posisi Bermain */}
                     <div>
                       <label className="block text-xs font-bold text-slate-700 dark:text-purple-200 mb-1">
                         POSISI BERMAIN
@@ -982,6 +1013,7 @@ export default function TeamRosterPage({ params }: { params: Promise<{ id: strin
                       </select>
                     </div>
 
+                    {/* Tinggi Badan (CM) */}
                     <div>
                       <label className="block text-xs font-bold text-slate-700 dark:text-purple-200 mb-1">
                         TINGGI BADAN (CM)
@@ -998,6 +1030,7 @@ export default function TeamRosterPage({ params }: { params: Promise<{ id: strin
                       />
                     </div>
 
+                    {/* Berat Badan (KG) */}
                     <div>
                       <label className="block text-xs font-bold text-slate-700 dark:text-purple-200 mb-1">
                         BERAT BADAN (KG)
@@ -1014,17 +1047,30 @@ export default function TeamRosterPage({ params }: { params: Promise<{ id: strin
                       />
                     </div>
                   </>
+                ) : (
+                  /* Bagian Khusus Official Tim */
+                  <div className="sm:col-span-2 p-3.5 rounded-xl bg-purple-50/40 dark:bg-[#1a0b36]/60 border border-purple-100 dark:border-purple-900/40 text-xs text-slate-600 dark:text-purple-300">
+                    <p className="font-semibold text-slate-800 dark:text-white mb-1">
+                      ℹ️ Personel Official Tim ({formData.teamRole || 'Official'}):
+                    </p>
+                    <p className="text-[11px] leading-relaxed text-slate-500 dark:text-purple-400/80">
+                      Official tim bukan merupakan mahasiswa/atlet bertanding, sehingga data akademik (NIM, Fakultas, Jurusan, Tahun Angkatan) serta Nomor Jersey & Posisi Bermain tidak diperlukan.
+                    </p>
+                  </div>
                 )}
 
-                {/* Upload Foto Jersey */}
+                {/* Upload Foto */}
                 <div className="sm:col-span-2">
                   <label className="block text-xs font-bold text-slate-700 dark:text-purple-200 mb-1.5">
-                    UPLOAD PHOTO DENGAN JERSEY VOLI
+                    {isPlayerSlot ? 'UPLOAD PHOTO DENGAN JERSEY VOLI' : 'UPLOAD FOTO RESMI OFFICIAL'}
                   </label>
                   <PhotoUpload
+                    key={`photo-slot-${selectedSlot}`}
                     currentPhotoUrl={formData.photoUrl}
                     onPhotoUploaded={url => handleFormChange('photoUrl', url)}
                     disabled={!isEditable}
+                    label={isPlayerSlot ? 'Upload Photo dengan Jersey Voli' : 'Upload Foto Resmi Official'}
+                    sublabel={isPlayerSlot ? 'Format JPG / PNG (Rasio 3:4 Direkomendasikan)' : 'Format JPG / PNG (Pakaian Rapi / Berkerah / ID Card)'}
                   />
                 </div>
               </div>
@@ -1042,7 +1088,7 @@ export default function TeamRosterPage({ params }: { params: Promise<{ id: strin
                       {selectedSlot > 1 && (
                         <button
                           type="button"
-                          onClick={() => setSelectedSlot(selectedSlot - 1)}
+                          onClick={() => switchSlot(selectedSlot - 1)}
                           className="px-3.5 py-2.5 rounded-xl text-xs font-semibold bg-white dark:bg-[#1f0e3f] text-slate-700 dark:text-purple-200 border border-purple-200 dark:border-purple-800 hover:bg-purple-50 cursor-pointer"
                         >
                           ← Slot #{selectedSlot - 1}
@@ -1052,7 +1098,7 @@ export default function TeamRosterPage({ params }: { params: Promise<{ id: strin
                       {selectedSlot < 20 && (
                         <button
                           type="button"
-                          onClick={() => setSelectedSlot(selectedSlot + 1)}
+                          onClick={() => switchSlot(selectedSlot + 1)}
                           className="px-4 py-2.5 rounded-xl text-xs font-bold bg-purple-600 hover:bg-purple-500 text-white shadow-xs transition-all cursor-pointer"
                         >
                           Slot #{selectedSlot + 1} →
@@ -1091,7 +1137,7 @@ export default function TeamRosterPage({ params }: { params: Promise<{ id: strin
                       {selectedSlot > 1 && (
                         <button
                           type="button"
-                          onClick={() => setSelectedSlot(selectedSlot - 1)}
+                          onClick={() => switchSlot(selectedSlot - 1)}
                           className="px-3.5 py-2.5 rounded-xl text-xs font-semibold bg-white dark:bg-[#1f0e3f] text-slate-700 dark:text-purple-200 border border-purple-200 dark:border-purple-800 hover:bg-purple-50 cursor-pointer"
                         >
                           ← Slot #{selectedSlot - 1}

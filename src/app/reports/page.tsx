@@ -208,7 +208,7 @@ export default function ReportsPage() {
   };
 
   return (
-    <div className="space-y-5 sm:space-y-6 pb-20 max-w-7xl mx-auto">
+    <div className="space-y-5 sm:space-y-6 pb-20 print:pb-0 print:space-y-3 max-w-7xl mx-auto">
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 print:hidden">
         <div className="flex items-center gap-3">
@@ -380,14 +380,14 @@ export default function ReportsPage() {
       </div>
 
       {/* Official Print Header */}
-      <div className="hidden print:block text-center border-b-2 border-slate-900 pb-3 mb-4">
+      <div className="hidden print:block text-center border-b-2 border-slate-900 pb-2 mb-3">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src="/lvm-logo.png"
           alt="Logo Liga Voli Mahasiswa"
-          className="h-18 sm:h-20 w-auto mx-auto mb-2 object-contain"
+          className="h-12 w-auto mx-auto mb-1 object-contain"
         />
-        <h2 className="text-lg font-black uppercase text-black">
+        <h2 className="text-base font-black uppercase text-black">
           LIGA VOLI MAHASISWA (LVM)
         </h2>
         <p className="text-xs font-bold text-gray-700 uppercase">
@@ -705,8 +705,8 @@ export default function ReportsPage() {
 
           {/* TAB 4: ID CARDS GALLERY */}
           {activeTab === 'idcards' && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3.5">
+            <div className="space-y-4 print:space-y-0">
+              <div className="id-cards-grid grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3.5 print:grid print:grid-cols-3 print:gap-2.5">
                 {searchedPlayers.length === 0 ? (
                   <div className="col-span-full py-12 text-center text-slate-400 dark:text-purple-400/60 text-xs italic">
                     Tidak ada ID card pemain yang sesuai dengan pencarian &ldquo;{searchTerm}&rdquo;
@@ -715,22 +715,22 @@ export default function ReportsPage() {
                   searchedPlayers.map(({ team, member }) => (
                     <div
                       key={member.id}
-                      className="relative overflow-hidden bg-white dark:bg-[#15072c] border border-purple-100 dark:border-purple-900/60 rounded-2xl p-3 shadow-sm flex flex-col items-center text-center group hover:border-pink-500/60 hover:shadow-neon-pink transition-all print:bg-white print:border-gray-300 print:text-black"
+                      className="id-card-item relative overflow-hidden bg-white dark:bg-[#15072c] border border-purple-100 dark:border-purple-900/60 rounded-2xl p-3 shadow-sm flex flex-col items-center text-center group hover:border-pink-500/60 hover:shadow-neon-pink transition-all print:bg-white print:border-gray-400 print:text-black print:rounded-xl print:p-2 print:shadow-none print:break-inside-avoid print:page-break-inside-avoid"
                     >
                       {/* Top Lanyard Header */}
-                      <div className="w-full bg-gradient-to-r from-purple-700 via-pink-600 to-purple-700 text-white text-[9px] font-black uppercase tracking-wider py-0.5 px-1 rounded-md mb-2 flex items-center justify-between">
+                      <div className="w-full bg-gradient-to-r from-purple-700 via-pink-600 to-purple-700 print:from-slate-800 print:to-slate-800 text-white text-[9px] font-black uppercase tracking-wider py-0.5 px-1 rounded-md mb-2 print:mb-1 flex items-center justify-between">
                         <span>LVM</span>
                         <span>AKREDITASI</span>
                       </div>
 
-                      <div className="w-full flex items-center justify-between text-[10px] mb-1.5 font-mono">
+                      <div className="w-full flex items-center justify-between text-[10px] mb-1.5 print:mb-1 font-mono">
                         <span className="text-slate-500 dark:text-purple-400/60 print:text-gray-600 truncate max-w-[65px]">{member.regNumber}</span>
-                        <span className="w-5 h-5 rounded-md bg-pink-600 text-white font-black flex items-center justify-center text-[10px] shadow-xs">
+                        <span className="w-5 h-5 rounded-md bg-pink-600 print:bg-slate-900 text-white font-black flex items-center justify-center text-[10px] shadow-xs">
                           #{member.jerseyNumber || '-'}
                         </span>
                       </div>
 
-                      <div className="w-20 h-26 sm:w-22 sm:h-28 rounded-xl bg-purple-50 dark:bg-[#1f0e3f] border border-purple-200 dark:border-purple-800/80 overflow-hidden flex items-center justify-center mb-2 shadow-xs group-hover:scale-105 transition-transform">
+                      <div className="w-20 h-26 sm:w-22 sm:h-28 print:w-16 print:h-22 rounded-xl bg-purple-50 dark:bg-[#1f0e3f] border border-purple-200 dark:border-purple-800/80 overflow-hidden flex items-center justify-center mb-2 print:mb-1 shadow-xs group-hover:scale-105 transition-transform print:border-gray-300">
                         {member.photoUrl ? (
                           // eslint-disable-next-line @next/next/no-img-element
                           <img
@@ -739,17 +739,17 @@ export default function ReportsPage() {
                             className="w-full h-full object-cover"
                           />
                         ) : (
-                          <User className="w-8 h-8 text-purple-400" />
+                          <User className="w-8 h-8 text-purple-400 print:text-gray-500" />
                         )}
                       </div>
 
-                      <h4 className="font-bold text-xs text-slate-900 dark:text-white print:text-black truncate w-full">
+                      <h4 className="font-bold text-xs print:text-[11px] text-slate-900 dark:text-white print:text-black truncate w-full">
                         {member.fullName || '(Belum Diisi)'}
                       </h4>
-                      <p className="text-[10px] text-pink-600 dark:text-pink-400 print:text-black font-black uppercase tracking-wide truncate w-full">
+                      <p className="text-[10px] print:text-[9px] text-pink-600 dark:text-pink-400 print:text-black font-black uppercase tracking-wide truncate w-full">
                         {member.position || 'Pemain'}
                       </p>
-                      <p className="text-[10px] text-slate-500 dark:text-purple-400/70 print:text-gray-600 truncate w-full mt-0.5">
+                      <p className="text-[10px] print:text-[9px] text-slate-500 dark:text-purple-400/70 print:text-gray-600 truncate w-full mt-0.5 print:mt-0">
                         {team.name}
                       </p>
                     </div>
@@ -760,7 +760,7 @@ export default function ReportsPage() {
           )}
 
           {/* Signature Block */}
-          <div className="hidden print:grid grid-cols-3 text-center text-[11px] mt-10 text-black">
+          <div className="hidden print:grid grid-cols-3 text-center text-[11px] mt-8 print:break-inside-avoid text-black">
             <div>
               <p>Dibuat Oleh,</p>
               <p className="mt-12 font-bold underline">Sekretariat Pertandingan</p>

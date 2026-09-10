@@ -7,15 +7,32 @@ interface PhotoUploadProps {
   currentPhotoUrl?: string;
   onPhotoUploaded: (url: string) => void;
   disabled?: boolean;
+  label?: string;
+  sublabel?: string;
 }
 
-export default function PhotoUpload({ currentPhotoUrl, onPhotoUploaded, disabled = false }: PhotoUploadProps) {
+export default function PhotoUpload({
+  currentPhotoUrl,
+  onPhotoUploaded,
+  disabled = false,
+  label,
+  sublabel,
+}: PhotoUploadProps) {
   const [tempPreview, setTempPreview] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [dragActive, setDragActive] = useState(false);
   const [sessionUploadedUrl, setSessionUploadedUrl] = useState<string | null>(null);
   const [sessionDeleteToken, setSessionDeleteToken] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Bersihkan preview lokal & status upload saat currentPhotoUrl berubah dari luar
+  const [prevPhotoUrl, setPrevPhotoUrl] = useState(currentPhotoUrl);
+  if (prevPhotoUrl !== currentPhotoUrl) {
+    setPrevPhotoUrl(currentPhotoUrl);
+    setTempPreview(null);
+    setSessionUploadedUrl(null);
+    setSessionDeleteToken(null);
+  }
 
   const displayUrl = tempPreview || currentPhotoUrl || '';
 
@@ -63,6 +80,7 @@ export default function PhotoUpload({ currentPhotoUrl, onPhotoUploaded, disabled
         }
         setSessionUploadedUrl(data.photoUrl);
         setSessionDeleteToken(data.deleteToken || null);
+        setTempPreview(null);
         onPhotoUploaded(data.photoUrl);
       } else {
         setTempPreview(null);
@@ -150,7 +168,7 @@ export default function PhotoUpload({ currentPhotoUrl, onPhotoUploaded, disabled
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={displayUrl}
-              alt="Foto Jersey"
+              alt={label || 'Foto'}
               className="w-24 h-32 object-cover rounded-xl shadow-md border-2 border-pink-500/60"
             />
             {!disabled && (
@@ -164,7 +182,7 @@ export default function PhotoUpload({ currentPhotoUrl, onPhotoUploaded, disabled
               </button>
             )}
             <span className="text-[11px] text-emerald-600 dark:text-emerald-400 mt-2 font-bold flex items-center gap-1">
-              <Check className="w-3.5 h-3.5" /> Foto Jersey Terpasang
+              <Check className="w-3.5 h-3.5" /> {label ? 'Foto Terpasang' : 'Foto Jersey Terpasang'}
             </span>
           </div>
         ) : (
@@ -177,10 +195,10 @@ export default function PhotoUpload({ currentPhotoUrl, onPhotoUploaded, disabled
               </div>
             )}
             <span className="text-xs font-black uppercase tracking-wider text-slate-800 dark:text-white">
-              Upload Photo dengan Jersey Voli
+              {label || 'Upload Photo dengan Jersey Voli'}
             </span>
             <span className="text-[11px] text-slate-400 dark:text-purple-400/60 mt-0.5">
-              Format JPG / PNG (Rasio 3:4 Direkomendasikan)
+              {sublabel || 'Format JPG / PNG (Rasio 3:4 Direkomendasikan)'}
             </span>
           </div>
         )}
