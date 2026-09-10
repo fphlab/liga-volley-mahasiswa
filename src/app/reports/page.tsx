@@ -212,7 +212,9 @@ export default function ReportsPage() {
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 print:hidden">
         <div className="flex items-center gap-3">
-          <LvmLogo variant="icon-only" size="sm" />
+          <div className="p-1 sm:p-1.5 rounded-2xl bg-gradient-to-br from-[#1c083e] via-[#240a4e] to-[#120427] border border-purple-700/60 shadow-md shrink-0">
+            <LvmLogo variant="badge" size="sm" />
+          </div>
           <div>
             <h1 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight uppercase flex items-center gap-2">
               Modul Pelaporan Resmi
@@ -383,7 +385,7 @@ export default function ReportsPage() {
         <img
           src="/lvm-logo.png"
           alt="Logo Liga Voli Mahasiswa"
-          className="h-14 w-auto mx-auto mb-2 object-contain"
+          className="h-18 sm:h-20 w-auto mx-auto mb-2 object-contain"
         />
         <h2 className="text-lg font-black uppercase text-black">
           LIGA VOLI MAHASISWA (LVM)

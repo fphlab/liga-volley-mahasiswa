@@ -55,7 +55,7 @@ async function downloadWorkbook(workbook: ExcelJS.Workbook, filename: string): P
   URL.revokeObjectURL(url);
 }
 
-export async function exportReport1ToExcel(teams: Team[], filename = 'Report_1_Roster_Pemain_Liga_Volley.xlsx'): Promise<void> {
+export async function exportReport1ToExcel(teams: Team[], filename = 'Report_1_Roster_Pemain_Liga_Voli.xlsx'): Promise<void> {
   const rows: ReportRow[] = [];
 
   teams.forEach(team => {
@@ -84,7 +84,7 @@ export async function exportReport1ToExcel(teams: Team[], filename = 'Report_1_R
   await downloadWorkbook(workbook, filename);
 }
 
-export async function exportReport2ToExcel(teams: Team[], filename = 'Report_2_Verifikasi_Akademik_Liga_Volley.xlsx'): Promise<void> {
+export async function exportReport2ToExcel(teams: Team[], filename = 'Report_2_Verifikasi_Akademik_Liga_Voli.xlsx'): Promise<void> {
   const rows: ReportRow[] = [];
 
   teams.forEach(team => {

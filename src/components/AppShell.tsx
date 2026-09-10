@@ -39,18 +39,18 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         {/* Top Accent Neon Line */}
         <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-pink-500 to-transparent opacity-80" />
         
-        <div className="max-w-7xl mx-auto px-4 flex items-center justify-center gap-3 sm:gap-4 text-left">
+        <div className="max-w-7xl mx-auto px-4 flex items-center justify-center gap-3.5 sm:gap-4 text-left">
           <Link
             href="/"
-            className="inline-flex items-center shrink-0 group p-1 rounded-xl bg-[#180838] dark:bg-transparent border border-purple-800/40 dark:border-transparent transition-all shadow-xs"
+            className="inline-flex items-center shrink-0 group p-1.5 rounded-2xl bg-gradient-to-br from-[#1c083e] via-[#240a4e] to-[#120427] border border-purple-700/60 transition-all shadow-md group-hover:scale-105"
           >
             <LvmLogo variant="badge" size="md" />
           </Link>
 
           <div className="space-y-0.5">
             <div className="flex flex-col sm:flex-row sm:items-center gap-0.5 sm:gap-2">
-              <span className="font-black text-slate-800 dark:text-purple-100 tracking-wider text-xs uppercase">
-                Liga Volley Mahasiswa (LVM)
+              <span className="font-black text-slate-800 dark:text-purple-100 tracking-wider text-xs sm:text-sm uppercase">
+                Liga Voli Mahasiswa (LVM)
               </span>
               <span className="hidden sm:inline text-purple-300 dark:text-purple-800">•</span>
               <span className="text-[11px] text-slate-500 dark:text-purple-300/70">
@@ -58,7 +58,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               </span>
             </div>
             <p className="text-slate-400 dark:text-purple-400/50 text-[10px]">
-              &copy; {new Date().getFullYear()} Liga Volley Mahasiswa. Hak Cipta Dilindungi.
+              &copy; {new Date().getFullYear()} Liga Voli Mahasiswa. Hak Cipta Dilindungi.
             </p>
           </div>
         </div>

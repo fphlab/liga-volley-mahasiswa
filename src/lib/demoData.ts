@@ -1,7 +1,7 @@
 import { Team, Member, Region, Category, TeamRole } from './types';
 
 /**
- * Generator data demo/simulasi Liga Volley Mahasiswa.
+ * Generator data demo/simulasi Liga Voli Mahasiswa.
  * Dipisahkan dari seeder agar bisa dipakai oleh backend database mana pun
  * (sebelumnya: JSON file; kini: Supabase).
  */

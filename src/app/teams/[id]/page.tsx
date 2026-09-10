@@ -149,7 +149,9 @@ export default function TeamDetailPage({ params }: { params: Promise<{ id: strin
       {/* Header Banner */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 print:hidden">
         <div className="flex items-center gap-3">
-          <LvmLogo variant="icon-only" size="sm" />
+          <div className="p-1 sm:p-1.5 rounded-2xl bg-gradient-to-br from-[#1c083e] via-[#240a4e] to-[#120427] border border-purple-700/60 shadow-md shrink-0">
+            <LvmLogo variant="badge" size="sm" />
+          </div>
           <div>
             <h1 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight uppercase">{team.name}</h1>
             <p className="text-xs text-slate-500 dark:text-purple-300/70 mt-0.5">

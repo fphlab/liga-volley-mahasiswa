@@ -20,10 +20,10 @@ export default function LvmLogo({
   // If variant is 'badge' or 'icon-only', render the official lvm-badge.webp directly
   if (variant === 'badge' || variant === 'icon-only') {
     const badgeSizes = {
-      sm: 'h-8 w-8',
-      md: 'h-10 w-10 sm:h-11 sm:w-11',
-      lg: 'h-14 w-14 sm:h-16 sm:w-16',
-      xl: 'h-20 w-20 sm:h-24 sm:w-24',
+      sm: 'h-9 w-9 sm:h-10 sm:w-10',       // ~36-40px
+      md: 'h-12 w-12 sm:h-14 sm:w-14',     // ~48-56px (prominent on mobile & desktop)
+      lg: 'h-16 w-16 sm:h-20 sm:w-20',     // ~64-80px
+      xl: 'h-24 w-24 sm:h-28 sm:w-28',     // ~96-112px
     };
     const bClass = badgeSizes[size] || badgeSizes.md;
 
@@ -31,11 +31,11 @@ export default function LvmLogo({
       <div className={`relative inline-flex items-center justify-center select-none shrink-0 ${className}`}>
         <Image
           src="/lvm-badge.webp"
-          alt="LVM Badge"
+          alt="LVM - Liga Voli Mahasiswa"
           width={1080}
           height={1080}
           priority={priority}
-          className={`${bClass} object-contain drop-shadow-[0_2px_10px_rgba(232,2,166,0.35)] transition-transform group-hover:scale-105`}
+          className={`${bClass} object-contain drop-shadow-[0_2px_12px_rgba(232,2,166,0.4)] transition-transform group-hover:scale-105`}
         />
       </div>
     );
@@ -43,10 +43,10 @@ export default function LvmLogo({
 
   // Full variant (used for Hero banner): public/lvm-logo.png
   const heightClasses = {
-    sm: 'h-7 sm:h-8',           // ~28-32px
-    md: 'h-8 sm:h-9 md:h-10',   // ~32-40px
-    lg: 'h-16 sm:h-20 md:h-22', // ~64-88px (Hero banner)
-    xl: 'h-24 sm:h-28',         // ~96-112px
+    sm: 'h-8 sm:h-9',           // ~32-36px
+    md: 'h-11 sm:h-13 md:h-14', // ~44-56px
+    lg: 'h-20 sm:h-24 md:h-28', // ~80-112px (Hero banner)
+    xl: 'h-28 sm:h-36',         // ~112-144px
   };
 
   const hClass = heightClasses[size] || heightClasses.md;
@@ -61,7 +61,7 @@ export default function LvmLogo({
         width={949}
         height={545}
         priority={priority}
-        className="w-full h-full object-contain filter drop-shadow-[0_0_20px_rgba(255,0,127,0.45)] transition-transform duration-300 group-hover:scale-[1.02]"
+        className="w-full h-full object-contain filter drop-shadow-[0_0_25px_rgba(255,0,127,0.5)] transition-transform duration-300 group-hover:scale-[1.02]"
       />
     </div>
   );

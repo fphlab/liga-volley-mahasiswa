@@ -405,7 +405,9 @@ export default function TeamRosterPage({ params }: { params: Promise<{ id: strin
       {/* Top Header & Breadcrumb */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <LvmLogo variant="icon-only" size="sm" />
+          <div className="p-1 sm:p-1.5 rounded-2xl bg-gradient-to-br from-[#1c083e] via-[#240a4e] to-[#120427] border border-purple-700/60 shadow-md shrink-0">
+            <LvmLogo variant="badge" size="sm" />
+          </div>
           <div>
             <h1 className="text-lg sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight uppercase">
               {team.name}
@@ -1017,7 +1019,7 @@ export default function TeamRosterPage({ params }: { params: Promise<{ id: strin
                 {/* Upload Foto Jersey */}
                 <div className="sm:col-span-2">
                   <label className="block text-xs font-bold text-slate-700 dark:text-purple-200 mb-1.5">
-                    UPLOAD PHOTO DENGAN JERSEY VOLLEY
+                    UPLOAD PHOTO DENGAN JERSEY VOLI
                   </label>
                   <PhotoUpload
                     currentPhotoUrl={formData.photoUrl}

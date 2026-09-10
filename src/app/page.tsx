@@ -14,6 +14,7 @@ import {
 import { Region, Category, RegionalQuota, REGIONS_CONFIG, MAX_TEAMS_PER_REGION_CATEGORY } from '@/lib/types';
 import { useAppMode } from '@/components/AppModeContext';
 import ProductionLanding from '@/components/ProductionLanding';
+import LvmLogo from '@/components/LvmLogo';
 
 export default function RootRegisterPage() {
   const { isProductionHolding } = useAppMode();
@@ -193,13 +194,18 @@ export default function RootRegisterPage() {
   return (
     <div className="max-w-4xl mx-auto space-y-6 pb-16">
       {/* Top Header */}
-      <div>
-        <h1 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight uppercase">
-          Formulir Pendaftaran Tim
-        </h1>
-        <p className="text-xs text-slate-500 dark:text-purple-300/70 mt-1">
-          Langkah 1 dari 2: Registrasi Identitas Tim & Wilayah Regional
-        </p>
+      <div className="flex items-center gap-3.5">
+        <div className="p-1 sm:p-1.5 rounded-2xl bg-gradient-to-br from-[#1c083e] via-[#240a4e] to-[#120427] border border-purple-700/60 shadow-md shrink-0">
+          <LvmLogo variant="badge" size="sm" />
+        </div>
+        <div>
+          <h1 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight uppercase">
+            Formulir Pendaftaran Tim
+          </h1>
+          <p className="text-xs text-slate-500 dark:text-purple-300/70 mt-0.5">
+            Liga Voli Mahasiswa (LVM) • Langkah 1 dari 2: Registrasi Identitas Tim & Wilayah Regional
+          </p>
+        </div>
       </div>
 
       {/* Quota Alert Banner */}

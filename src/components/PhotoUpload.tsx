@@ -177,7 +177,7 @@ export default function PhotoUpload({ currentPhotoUrl, onPhotoUploaded, disabled
               </div>
             )}
             <span className="text-xs font-black uppercase tracking-wider text-slate-800 dark:text-white">
-              Upload Photo dengan Jersey Volley
+              Upload Photo dengan Jersey Voli
             </span>
             <span className="text-[11px] text-slate-400 dark:text-purple-400/60 mt-0.5">
               Format JPG / PNG (Rasio 3:4 Direkomendasikan)
