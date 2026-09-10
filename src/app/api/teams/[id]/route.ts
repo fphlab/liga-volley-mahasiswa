@@ -39,21 +39,38 @@ export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  // Sesuai brief klien (gaya Google Form): data pendaftaran final & terkunci.
-  // Hanya Panitia dengan Secret PIN yang berhak mengubah data atau status tim.
-  if (!verifyAdminKey(request)) {
-    return NextResponse.json(
-      {
-        success: false,
-        error: 'Akses ditolak: Formulir pendaftaran bersifat final (terkunci). Perubahan data hanya dapat dilakukan oleh Panitia.',
-      },
-      { status: 401 }
-    );
-  }
-
   try {
     const { id } = await params;
+    const isAdmin = verifyAdminKey(request);
     const body = await request.json();
+
+    const existingTeam = await getTeamById(id);
+    if (!existingTeam) {
+      return NextResponse.json(
+        { success: false, error: 'Tim tidak ditemukan' },
+        { status: 404 }
+      );
+    }
+
+    // Sesuai brief klien (gaya Google Form):
+    // Pendaftar publik HANYA diizinkan memfinalisasi pendaftaran (mengubah status Draft -> Lengkap).
+    // Mutasi lain (seperti verifikasi tim, ganti region/nama, atau edit tim yang sudah final) wajib PIN Panitia.
+    if (!isAdmin) {
+      const isFinalizingDraft =
+        existingTeam.status === 'Draft' &&
+        body.status === 'Lengkap' &&
+        Object.keys(body).length === 1;
+
+      if (!isFinalizingDraft) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: 'Akses ditolak: Formulir pendaftaran bersifat final (terkunci). Perubahan data hanya dapat dilakukan oleh Panitia.',
+          },
+          { status: 401 }
+        );
+      }
+    }
 
     const result = await updateTeam(id, body);
     if (!result.success) {

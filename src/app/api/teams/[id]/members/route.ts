@@ -6,20 +6,32 @@ export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  // Sesuai brief klien (gaya Google Form): data pendaftaran final & terkunci.
-  // Hanya Panitia dengan Secret PIN yang berhak mengubah roster pemain.
-  if (!verifyAdminKey(request)) {
-    return NextResponse.json(
-      {
-        success: false,
-        error: 'Akses ditolak: Susunan roster pemain telah dikunci (final). Perubahan data roster hanya dapat dilakukan oleh Panitia.',
-      },
-      { status: 401 }
-    );
-  }
-
   try {
     const { id: teamId } = await params;
+    const isAdmin = verifyAdminKey(request);
+
+    // Ambil data tim untuk cek status pendaftaran
+    const currentTeam = await getTeamById(teamId);
+    if (!currentTeam) {
+      return NextResponse.json(
+        { success: false, error: 'Tim tidak ditemukan' },
+        { status: 404 }
+      );
+    }
+
+    // Sesuai sistem Google Form: jika tim sudah final (status !== 'Draft'),
+    // pendaftaran dikunci dan hanya Panitia dengan PIN yang boleh mengedit.
+    // Jika tim masih 'Draft' (tahap pendaftaran), pendaftar dapat mengisi dan menyimpan roster.
+    if (!isAdmin && currentTeam.status !== 'Draft') {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Akses ditolak: Susunan roster pemain telah dikunci (final). Perubahan data roster hanya dapat dilakukan oleh Panitia.',
+        },
+        { status: 401 }
+      );
+    }
+
     const body = await request.json();
     const { memberId, updates } = body;
 
