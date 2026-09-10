@@ -42,7 +42,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         <div className="max-w-7xl mx-auto px-4 flex items-center justify-center gap-3.5 sm:gap-4 text-left">
           <Link
             href="/"
-            className="inline-flex items-center shrink-0 group p-1.5 rounded-2xl bg-gradient-to-br from-[#1c083e] via-[#240a4e] to-[#120427] border border-purple-700/60 transition-all shadow-md group-hover:scale-105"
+            className="w-12 h-12 sm:w-14 sm:h-14 aspect-square rounded-2xl bg-gradient-to-br from-[#1c083e] via-[#240a4e] to-[#120427] border border-purple-700/60 shadow-md transition-all group-hover:scale-105 shrink-0 flex items-center justify-center p-1 sm:p-1.5"
+            aria-label="LVM - Liga Voli Mahasiswa"
           >
             <LvmLogo variant="badge" size="md" />
           </Link>

@@ -32,27 +32,14 @@ export default function Navbar() {
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-18 sm:h-20">
-          {/* Brand Logo - Badge & Explicit Official Name */}
+          {/* Brand Logo - Badge Only */}
           <Link
             href="/"
-            className="flex items-center gap-2.5 sm:gap-3 group transition-all shrink-0"
+            className="flex items-center group transition-all shrink-0"
+            aria-label="LVM - Liga Voli Mahasiswa"
           >
-            <div className="p-1 sm:p-1.5 rounded-2xl bg-gradient-to-br from-[#1c083e] via-[#240a4e] to-[#120427] border border-purple-700/60 shadow-md transition-transform group-hover:scale-105 shrink-0">
+            <div className="w-12 h-12 sm:w-14 sm:h-14 aspect-square rounded-2xl bg-gradient-to-br from-[#1c083e] via-[#240a4e] to-[#120427] border border-purple-700/60 shadow-md transition-transform group-hover:scale-105 shrink-0 flex items-center justify-center p-1 sm:p-1.5">
               <LvmLogo variant="badge" size="md" priority />
-            </div>
-            <div className="flex flex-col justify-center">
-              <div className="flex items-center gap-1.5">
-                <span className="font-black text-xs sm:text-sm tracking-wider text-slate-900 dark:text-white uppercase leading-none">
-                  LVM
-                </span>
-                <span className="hidden sm:inline-block w-1 h-1 rounded-full bg-pink-500" />
-                <span className="hidden sm:inline-block text-[10px] font-bold text-slate-500 dark:text-purple-300/80 normal-case tracking-normal">
-                  Portal Resmi
-                </span>
-              </div>
-              <span className="text-[9px] sm:text-[10px] font-black text-pink-600 dark:text-pink-400 tracking-wider uppercase leading-tight mt-0.5">
-                LIGA VOLI MAHASISWA
-              </span>
             </div>
           </Link>
 

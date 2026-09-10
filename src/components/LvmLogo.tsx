@@ -20,15 +20,15 @@ export default function LvmLogo({
   // If variant is 'badge' or 'icon-only', render the official lvm-badge.webp directly
   if (variant === 'badge' || variant === 'icon-only') {
     const badgeSizes = {
-      sm: 'h-9 w-9 sm:h-10 sm:w-10',       // ~36-40px
-      md: 'h-12 w-12 sm:h-14 sm:w-14',     // ~48-56px (prominent on mobile & desktop)
-      lg: 'h-16 w-16 sm:h-20 sm:w-20',     // ~64-80px
-      xl: 'h-24 w-24 sm:h-28 sm:w-28',     // ~96-112px
+      sm: 'h-8 w-8 sm:h-9 sm:w-9',         // ~32-36px
+      md: 'h-10 w-10 sm:h-12 sm:w-12',     // ~40-48px
+      lg: 'h-14 w-14 sm:h-18 sm:w-18',     // ~56-72px
+      xl: 'h-20 w-20 sm:h-26 sm:w-26',     // ~80-104px
     };
     const bClass = badgeSizes[size] || badgeSizes.md;
 
     return (
-      <div className={`relative inline-flex items-center justify-center select-none shrink-0 ${className}`}>
+      <div className={`relative flex items-center justify-center select-none shrink-0 ${className}`}>
         <Image
           src="/lvm-badge.webp"
           alt="LVM - Liga Voli Mahasiswa"
