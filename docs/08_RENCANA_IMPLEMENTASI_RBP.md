@@ -572,3 +572,73 @@ Lihat `docs/09_DAFTAR_46_KODE_AKSES.md` (siap cetak/dibagikan). Ringkasnya:
 - T12: QA runtime lolos 17 cek (login 3 peran + case-insensitive, gate guest 401/redirect `/login?from=`, matriks 403, `/api/auth/codes` = 46 kode, logout, halaman `/login`, data existing utuh 4 tim × 20 slot).
 - **TERTUNDA (butuh manusia)**: DDL §10.1 di Supabase SQL Editor → seed `force` §10.2 → assign 20 tim §10.3.
 - Seluruh pekerjaan di-commit di `main` (lihat riwayat git).
+
+---
+
+## 15. Adendum: Kode Acak per Nama Kampus via Tabel Database (12 September 2026)
+
+> **Latar:** user meminta kode tidak lagi berpola tebakan (`asp1`, `user1`) melainkan acak 7 karakter (contoh `A3FO7VU`, `U74IO98`), tidak hardcoded, label memakai **nama kampus**, Panpel **bisa melihat** kode, dan alur terintegrasi: **Panpel tambah tim → kode otomatis tergenerate**. Keputusan dikunci di chat 11–12/9/2026.
+
+### 15.1 Keputusan terkunci adendum
+
+1. Format kode: 7 karakter, alfabet 32 simbol tanpa ambigu (`ABCDEFGHJKMNPQRSTUVWXYZ23456789`), via `crypto.randomBytes`, cek duplikat ke DB.
+2. Penyimpanan: tabel `access_accounts` (Opsi B). Kode disimpan **terenkripsi AES-256-GCM** (kunci `ACCESS_CODE_KEY` env-only) agar Panpel bisa melihat; lookup login memakai `code_hash` sha256.
+3. Label = nama kampus saja (`UNESA Surabaya`), tanpa suffix kategori. `id` slug tetap unik (suffix kategori di id bila tabrakan: `unesa-surabaya-putri`); id boleh terlihat di API/DB, yang rahasia hanya kodenya.
+4. `teams.owner_code` menyimpan **id akun** (stabil walau kode diregenerate).
+5. Tidak ada kode cadangan menganggur: kode lahir bersama tim (seed/bootstrap atau tambah tim).
+6. Kode lama (`asp1`, `user1`…) dan cookie lama **mati seketika** via session `v: 2`.
+7. `docs/09` dibersihkan dari kode plaintext (label + status ikatan saja); lembar kode hanya file terpisah di luar git.
+
+### 15.2 Skema `access_accounts`
+
+```sql
+create table if not exists public.access_accounts (
+  id          text primary key,
+  code_hash   text not null unique,
+  code_enc    text not null,
+  role        text not null check (role in ('panpel','mojisport','peserta')),
+  label       text not null,
+  team_id     text references public.teams(id) on delete set null,
+  revoked     boolean not null default false,
+  created_at  timestamptz not null default now(),
+  updated_at  timestamptz not null default now()
+);
+-- + trigger touch_updated_at + RLS enable tanpa policy (pola sama: service-role only)
+```
+
+Masuk `supabase/schema.sql` (idempotent); satu run SQL Editor mencakup ini + DDL `owner_code` §10.1 yang tertunda. Env baru: `ACCESS_CODE_KEY` (32 byte), `BOOTSTRAP_SECRET` (proteksi bootstrap, dihapus setelah dipakai).
+
+### 15.3 Task T13–T19 (rinci)
+
+**T13 · Skema + env.** Tulis tabel §15.2 ke `supabase/schema.sql`; tambah `ACCESS_CODE_KEY` + `BOOTSTRAP_SECRET` ke `.env.example`; dokumentasikan di runbook. Acceptance: file SQL valid, instruksi run satu langkah.
+
+**T14 · Modul akun + auth async.** Baru `src/lib/accounts.ts`; tambah method ke interface `DataBackend` + implementasi `pgBackend` & `supabaseBackend` (`findAccountByHash`, `listAccounts`, `createAccounts`, `setRevoked`, `rotateHash`). Hapus total daftar hardcoded di `accessCodes.ts`; `resolveAccessCode` jadi async (trim+uppercase → sha256 → lookup `revoked=false` → `Actor{role, subject: label, ownerCode: id}`). Session payload `v: 2`, tolak versi lama. `getActorFromRequest` async + cek revoke per request; proxy tetap cek cepat HMAC+versi. Acceptance: `tsc` bersih, kode lama ditolak, sesi lama invalid.
+
+**T15 · Bootstrap satu tembakan** (`POST /api/admin/bootstrap`, baru). Guard: secret env (`timingSafeEqual`) + rate-limit ketat + tolak bila akun sudah ada (kecuali `force:true`). Generate 30 kode (5+5+20, cek duplikat) → insert akun (label nama kampus) → buat 20 tim via `buildDemoTeams` → ikat otomatis. Response plaintext sekali tampil `{accounts, assignments}`; tidak di-commit. Acceptance: DB kosong → 30 akun + 20 tim + 20 ikatan dalam satu panggilan.
+
+**T16 · Auto-generate saat Panpel tambah tim.** Hook di `POST /api/teams` (panpel-only): selesai `createTeam` → generate kode + akun + ikat → kembalikan kode di response → form `/` tampilkan modal sekali-tampil (salin & bagikan). Acceptance: tambah tim → kode muncul sekali, tersimpan terenkripsi.
+
+**T17 · Panel kode di dashboard.** Ubah kolom Pemilik (`dashboard/page.tsx` baris 183–205, 461–690): label kampus + tombol Lihat kode (masked + reveal, panpel-only), Generate ulang (id & ikatan tetap), Cabut akses. `GET /api/auth/codes` naik fungsi (dekripsi + label + ikatan). Acceptance: matriks peran tiap aksi (peserta/mojisport 403).
+
+**T18 · UI + dokumen.** Login tak berubah (satu kolom); badge Navbar tampilkan label kampus; `docs/09` tanpa kode; adendum `docs/08` (bagian ini); runbook bootstrap + distribusi + penghapusan `BOOTSTRAP_SECRET`.
+
+**T19 · QA skema baru.** Bootstrap bersih; login tiap peran; kode lama ditolak; revoke memutus akses; regenerate tak memutus ikatan; kode terlihat hanya oleh panpel; `tsc` + `lint` bersih; lalu DDL + seed + assign betulan.
+
+### 15.4 Gelombang eksekusi adendum
+
+```
+Gelombang A:  T13 ‖ T14   (skema di file SQL vs kode; disjoint)
+Gelombang B:  T15 ‖ T16   (setelah T14; bootstrap vs hook create — file beda)
+Gelombang C:  T17 ‖ T18   (setelah T14–T16)
+Gelombang D:  T19
+```
+
+### 15.5 Risiko tambahan adendum
+
+| Risiko | Mitigasi |
+|---|---|
+| Bocor DB saja → kode aman (terenkripsi); bocor DB + env → kode terbaca | Diterima eksplisit (syarat fitur "dilihat admin"); kunci tidak di git |
+| Kode tampil sekali hilang sebelum disalin | Regenerate oleh Panpel kapan pun (ikatan tim tetap) |
+| Slug id tabrakan | Suffix kategori/nomor otomatis + unique constraint DB |
+| Cookie lama masih valid kriptografis | Ditolak via `v: 2` |
+| Akun direvoke tapi sesi masih hidup | Cek revoke async per request terproteksi; proxy tetap cepat |
