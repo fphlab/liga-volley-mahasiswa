@@ -726,3 +726,14 @@ Bootstrap yang terpanggil setelahnya harus gagal (secret tidak dikenal).
 Bagikan tiap kode peserta ke manajer kampus terkait + 10 kode peran ke
 pemegangnya melalui jalur offline. Kode hilang → Panpel generate ulang dari
 dashboard (ikatan tim tetap; lihat laporan T17).
+
+---
+
+## 17. Bootstrap Produksi (12 September 2026)
+
+- Opsi A dipilih: backup 4 tim lama ke `/tmp/lvm-backup-4tim.json`, lalu bootstrap `force:true`.
+- Hasil: **30 akun** (5 panpel + 5 mojisport + 20 peserta, revoked=0) + **20 tim** bernomor `LVM-TGH-PA-01…05`, `LVM-TGH-PI-01…04`, `LVM-TMR-PA-01…05`, `LVM-TMR-PI-01…06` + **400 slot anggota** + 20 ikatan (unbound=0).
+- QA lolos: login 3 peran (badge label kampus), session `ownerCode` benar, peserta POST tim 403, mojisport DELETE 403, peserta edit tim lain 403 tanpa mutasi, guest 401, `/api/auth/codes` 30 baris plaintext (panpel).
+- 2 bug pra-produksi diperbaiki: allowlist proxy untuk `/api/admin/bootstrap`; try/catch login/verify (500 JSON rapi).
+- `BOOTSTRAP_SECRET` dihapus dari `.env.local` pasca-bootstrap; server direstart; login terverifikasi ulang.
+- Lembar kode plaintext diserahkan offline ke operator (tidak di-commit).
