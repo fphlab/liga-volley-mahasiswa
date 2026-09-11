@@ -135,51 +135,64 @@ export default function ReportsPage() {
     });
   }, [filteredTeams, searchTerm]);
 
-  const allFilteredPlayers: Array<{ team: Team; member: Member }> = [];
-  const allFilteredMembers: Array<{ team: Team; member: Member }> = [];
+  const [report2RoleFilter, setReport2RoleFilter] = useState<'PEMAIN' | 'ALL' | 'OFFICIAL'>('PEMAIN');
+  const [idCardRoleFilter, setIdCardRoleFilter] = useState<'ALL' | 'PEMAIN' | 'OFFICIAL'>('ALL');
 
-  filteredTeams.forEach(team => {
-    team.members.forEach(member => {
-      allFilteredMembers.push({ team, member });
-      if (member.teamRole === 'Pemain') {
-        allFilteredPlayers.push({ team, member });
-      }
+  const allFilteredMembers = useMemo(() => {
+    const list: Array<{ team: Team; member: Member }> = [];
+    filteredTeams.forEach(team => {
+      team.members.forEach(member => {
+        list.push({ team, member });
+      });
     });
-  });
+    return list;
+  }, [filteredTeams]);
 
-  const searchedPlayers = allFilteredPlayers.filter(({ team, member }) => {
-    if (!searchTerm.trim()) return true;
-    const term = searchTerm.toLowerCase();
-    return (
-      (member.fullName && member.fullName.toLowerCase().includes(term)) ||
-      (member.jerseyNumber && member.jerseyNumber.toLowerCase().includes(term)) ||
-      (member.nim && member.nim.toLowerCase().includes(term)) ||
-      (member.position && member.position.toLowerCase().includes(term)) ||
-      (member.faculty && member.faculty.toLowerCase().includes(term)) ||
-      (member.major && member.major.toLowerCase().includes(term)) ||
-      (member.regNumber && member.regNumber.toLowerCase().includes(term)) ||
-      team.name.toLowerCase().includes(term) ||
-      team.teamNumber.toLowerCase().includes(term) ||
-      team.province.toLowerCase().includes(term)
-    );
-  });
+  const searchedReport2Members = useMemo(() => {
+    return allFilteredMembers.filter(({ team, member }) => {
+      if (report2RoleFilter === 'PEMAIN' && member.teamRole !== 'Pemain') return false;
+      if (report2RoleFilter === 'OFFICIAL' && member.teamRole === 'Pemain') return false;
 
-  const searchedMembers = allFilteredMembers.filter(({ team, member }) => {
-    if (!searchTerm.trim()) return true;
-    const term = searchTerm.toLowerCase();
-    return (
-      (member.fullName && member.fullName.toLowerCase().includes(term)) ||
-      (member.nim && member.nim.toLowerCase().includes(term)) ||
-      (member.faculty && member.faculty.toLowerCase().includes(term)) ||
-      (member.major && member.major.toLowerCase().includes(term)) ||
-      (member.jerseyNumber && member.jerseyNumber.toLowerCase().includes(term)) ||
-      (member.position && member.position.toLowerCase().includes(term)) ||
-      (member.regNumber && member.regNumber.toLowerCase().includes(term)) ||
-      team.name.toLowerCase().includes(term) ||
-      team.teamNumber.toLowerCase().includes(term) ||
-      team.province.toLowerCase().includes(term)
-    );
-  });
+      if (!searchTerm.trim()) return true;
+      const term = searchTerm.toLowerCase();
+      return (
+        (member.fullName && member.fullName.toLowerCase().includes(term)) ||
+        (member.teamRole && member.teamRole.toLowerCase().includes(term)) ||
+        (member.nim && member.nim.toLowerCase().includes(term)) ||
+        (member.faculty && member.faculty.toLowerCase().includes(term)) ||
+        (member.major && member.major.toLowerCase().includes(term)) ||
+        (member.jerseyNumber && member.jerseyNumber.toLowerCase().includes(term)) ||
+        (member.position && member.position.toLowerCase().includes(term)) ||
+        (member.regNumber && member.regNumber.toLowerCase().includes(term)) ||
+        team.name.toLowerCase().includes(term) ||
+        team.teamNumber.toLowerCase().includes(term) ||
+        team.province.toLowerCase().includes(term)
+      );
+    });
+  }, [allFilteredMembers, report2RoleFilter, searchTerm]);
+
+  const searchedIdCards = useMemo(() => {
+    return allFilteredMembers.filter(({ team, member }) => {
+      if (idCardRoleFilter === 'PEMAIN' && member.teamRole !== 'Pemain') return false;
+      if (idCardRoleFilter === 'OFFICIAL' && member.teamRole === 'Pemain') return false;
+
+      if (!searchTerm.trim()) return true;
+      const term = searchTerm.toLowerCase();
+      return (
+        (member.fullName && member.fullName.toLowerCase().includes(term)) ||
+        (member.teamRole && member.teamRole.toLowerCase().includes(term)) ||
+        (member.jerseyNumber && member.jerseyNumber.toLowerCase().includes(term)) ||
+        (member.nim && member.nim.toLowerCase().includes(term)) ||
+        (member.position && member.position.toLowerCase().includes(term)) ||
+        (member.faculty && member.faculty.toLowerCase().includes(term)) ||
+        (member.major && member.major.toLowerCase().includes(term)) ||
+        (member.regNumber && member.regNumber.toLowerCase().includes(term)) ||
+        team.name.toLowerCase().includes(term) ||
+        team.teamNumber.toLowerCase().includes(term) ||
+        team.province.toLowerCase().includes(term)
+      );
+    });
+  }, [allFilteredMembers, idCardRoleFilter, searchTerm]);
 
   const handleExportExcel = async () => {
     try {
@@ -191,7 +204,7 @@ export default function ReportsPage() {
         await exportReport1ToExcel(exportTeams);
       } else if (activeTab === 'report2') {
         const teamMap = new Map<string, Team>();
-        searchedMembers.forEach(({ team, member }) => {
+        searchedReport2Members.forEach(({ team, member }) => {
           if (!teamMap.has(team.id)) {
             teamMap.set(team.id, { ...team, members: [] });
           }
@@ -368,13 +381,13 @@ export default function ReportsPage() {
             <>Total: <strong className="text-pink-600 dark:text-pink-400 font-bold">{report1Teams.length}</strong> Tim</>
           )}
           {activeTab === 'report2' && (
-            <>Total: <strong className="text-pink-600 dark:text-pink-400 font-bold">{searchedMembers.length}</strong> Personel</>
+            <>Total: <strong className="text-pink-600 dark:text-pink-400 font-bold">{searchedReport2Members.length}</strong> {report2RoleFilter === 'PEMAIN' ? 'Mahasiswa' : report2RoleFilter === 'OFFICIAL' ? 'Official' : 'Personel'}</>
           )}
           {activeTab === 'report3' && (
             <>Total: <strong className="text-pink-600 dark:text-pink-400 font-bold">{report3Teams.length}</strong> Tim</>
           )}
           {activeTab === 'idcards' && (
-            <>Total: <strong className="text-pink-600 dark:text-pink-400 font-bold">{searchedPlayers.length}</strong> Pemain</>
+            <>Total: <strong className="text-pink-600 dark:text-pink-400 font-bold">{searchedIdCards.length}</strong> {idCardRoleFilter === 'PEMAIN' ? 'Pemain' : idCardRoleFilter === 'OFFICIAL' ? 'Official' : 'Kartu'}</>
           )}
         </div>
       </div>
@@ -534,17 +547,55 @@ export default function ReportsPage() {
           {/* TAB 2: REPORT 2 */}
           {activeTab === 'report2' && (
             <div className="bg-white dark:bg-[#15072c] border border-purple-100 dark:border-purple-900/60 rounded-2xl p-5 shadow-sm transition-colors print:bg-white print:border-gray-400 print:p-3">
-              <div className="flex items-center justify-between pb-3 mb-3 border-b border-purple-50 dark:border-purple-950 print:border-gray-300">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 mb-3 border-b border-purple-50 dark:border-purple-950 print:border-gray-300">
                 <div>
                   <h3 className="text-sm sm:text-base font-black text-slate-900 dark:text-white print:text-black uppercase">
                     REPORT 2: Verifikasi Data Akademik Mahasiswa
                   </h3>
                   <p className="text-[11px] text-slate-500 dark:text-purple-400/70 print:text-gray-600">
-                    Memastikan keabsahan status mahasiswa aktif dari masing-masing perguruan tinggi
+                    Memastikan keabsahan status mahasiswa aktif dari masing-masing perguruan tinggi (PDDikti)
                   </p>
                 </div>
-                <span className="text-xs font-mono font-black text-pink-600 dark:text-pink-400 print:text-black">
-                  Total {searchedMembers.length} Personel
+                <div className="flex items-center gap-2 print:hidden">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider hidden sm:inline">Filter:</span>
+                  <div className="inline-flex rounded-xl bg-purple-50/70 dark:bg-[#1f0e3f] p-0.5 border border-purple-200/60 dark:border-purple-800/60">
+                    <button
+                      type="button"
+                      onClick={() => setReport2RoleFilter('PEMAIN')}
+                      className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                        report2RoleFilter === 'PEMAIN'
+                          ? 'bg-pink-600 text-white shadow-xs'
+                          : 'text-slate-600 dark:text-purple-300 hover:text-slate-900 dark:hover:text-white'
+                      }`}
+                    >
+                      Pemain Mahasiswa ({allFilteredMembers.filter(m => m.member.teamRole === 'Pemain').length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setReport2RoleFilter('ALL')}
+                      className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                        report2RoleFilter === 'ALL'
+                          ? 'bg-pink-600 text-white shadow-xs'
+                          : 'text-slate-600 dark:text-purple-300 hover:text-slate-900 dark:hover:text-white'
+                      }`}
+                    >
+                      Semua Personel ({allFilteredMembers.length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setReport2RoleFilter('OFFICIAL')}
+                      className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                        report2RoleFilter === 'OFFICIAL'
+                          ? 'bg-pink-600 text-white shadow-xs'
+                          : 'text-slate-600 dark:text-purple-300 hover:text-slate-900 dark:hover:text-white'
+                      }`}
+                    >
+                      Official Saja ({allFilteredMembers.filter(m => m.member.teamRole !== 'Pemain').length})
+                    </button>
+                  </div>
+                </div>
+                <span className="text-xs font-mono font-black text-pink-600 dark:text-pink-400 print:text-black shrink-0">
+                  Total {searchedReport2Members.length} {report2RoleFilter === 'PEMAIN' ? 'Mahasiswa' : report2RoleFilter === 'OFFICIAL' ? 'Official' : 'Personel'}
                 </span>
               </div>
 
@@ -562,14 +613,14 @@ export default function ReportsPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-purple-50 dark:divide-purple-950/60 print:divide-gray-200">
-                    {searchedMembers.length === 0 ? (
+                    {searchedReport2Members.length === 0 ? (
                       <tr>
                         <td colSpan={7} className="py-8 text-center text-slate-400 dark:text-purple-400/60 text-xs italic">
                           Tidak ada personel atau mahasiswa yang sesuai dengan pencarian &ldquo;{searchTerm}&rdquo;
                         </td>
                       </tr>
                     ) : (
-                      searchedMembers.map(({ team, member }) => (
+                      searchedReport2Members.map(({ team, member }) => (
                         <tr key={member.id} className="hover:bg-purple-50/40 dark:hover:bg-purple-950/30">
                           <td className="py-2.5 px-3 font-mono text-slate-600 dark:text-purple-300 print:text-black font-bold">
                             {member.regNumber || '-'}
@@ -706,54 +757,126 @@ export default function ReportsPage() {
           {/* TAB 4: ID CARDS GALLERY */}
           {activeTab === 'idcards' && (
             <div className="space-y-4 print:space-y-0">
+              {/* ID Card Filter Bar */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white dark:bg-[#15072c] border border-purple-100 dark:border-purple-900/60 rounded-2xl p-4 shadow-sm print:hidden">
+                <div>
+                  <h3 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-tight">
+                    Galeri ID Card Akreditasi Pertandingan
+                  </h3>
+                  <p className="text-[11px] text-slate-500 dark:text-purple-400/70">
+                    Kartu identitas resmi atlet dan official tim siap cetak / simpan ke format PDF (A4)
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider hidden sm:inline">Filter Kartu:</span>
+                  <div className="inline-flex rounded-xl bg-purple-50/70 dark:bg-[#1f0e3f] p-0.5 border border-purple-200/60 dark:border-purple-800/60">
+                    <button
+                      type="button"
+                      onClick={() => setIdCardRoleFilter('ALL')}
+                      className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                        idCardRoleFilter === 'ALL'
+                          ? 'bg-pink-600 text-white shadow-xs'
+                          : 'text-slate-600 dark:text-purple-300 hover:text-slate-900 dark:hover:text-white'
+                      }`}
+                    >
+                      Semua ({allFilteredMembers.length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setIdCardRoleFilter('PEMAIN')}
+                      className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                        idCardRoleFilter === 'PEMAIN'
+                          ? 'bg-pink-600 text-white shadow-xs'
+                          : 'text-slate-600 dark:text-purple-300 hover:text-slate-900 dark:hover:text-white'
+                      }`}
+                    >
+                      Pemain Saja ({allFilteredMembers.filter(m => m.member.teamRole === 'Pemain').length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setIdCardRoleFilter('OFFICIAL')}
+                      className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                        idCardRoleFilter === 'OFFICIAL'
+                          ? 'bg-pink-600 text-white shadow-xs'
+                          : 'text-slate-600 dark:text-purple-300 hover:text-slate-900 dark:hover:text-white'
+                      }`}
+                    >
+                      Official Saja ({allFilteredMembers.filter(m => m.member.teamRole !== 'Pemain').length})
+                    </button>
+                  </div>
+                </div>
+              </div>
+
               <div className="id-cards-grid grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3.5 print:grid print:grid-cols-3 print:gap-2.5">
-                {searchedPlayers.length === 0 ? (
+                {searchedIdCards.length === 0 ? (
                   <div className="col-span-full py-12 text-center text-slate-400 dark:text-purple-400/60 text-xs italic">
-                    Tidak ada ID card pemain yang sesuai dengan pencarian &ldquo;{searchTerm}&rdquo;
+                    Tidak ada ID card {idCardRoleFilter === 'PEMAIN' ? 'pemain' : idCardRoleFilter === 'OFFICIAL' ? 'official' : 'personel'} yang sesuai dengan pencarian &ldquo;{searchTerm}&rdquo;
                   </div>
                 ) : (
-                  searchedPlayers.map(({ team, member }) => (
-                    <div
-                      key={member.id}
-                      className="id-card-item relative overflow-hidden bg-white dark:bg-[#15072c] border border-purple-100 dark:border-purple-900/60 rounded-2xl p-3 shadow-sm flex flex-col items-center text-center group hover:border-pink-500/60 hover:shadow-neon-pink transition-all print:bg-white print:border-gray-400 print:text-black print:rounded-xl print:p-2 print:shadow-none print:break-inside-avoid print:page-break-inside-avoid"
-                    >
-                      {/* Top Lanyard Header */}
-                      <div className="w-full bg-gradient-to-r from-purple-700 via-pink-600 to-purple-700 print:from-slate-800 print:to-slate-800 text-white text-[9px] font-black uppercase tracking-wider py-0.5 px-1 rounded-md mb-2 print:mb-1 flex items-center justify-between">
-                        <span>LVM</span>
-                        <span>AKREDITASI</span>
-                      </div>
+                  searchedIdCards.map(({ team, member }) => {
+                    const isPlayer = member.teamRole === 'Pemain';
 
-                      <div className="w-full flex items-center justify-between text-[10px] mb-1.5 print:mb-1 font-mono">
-                        <span className="text-slate-500 dark:text-purple-400/60 print:text-gray-600 truncate max-w-[65px]">{member.regNumber}</span>
-                        <span className="w-5 h-5 rounded-md bg-pink-600 print:bg-slate-900 text-white font-black flex items-center justify-center text-[10px] shadow-xs">
-                          #{member.jerseyNumber || '-'}
-                        </span>
-                      </div>
+                    return (
+                      <div
+                        key={member.id}
+                        className="id-card-item relative overflow-hidden bg-white dark:bg-[#15072c] border border-purple-100 dark:border-purple-900/60 rounded-2xl p-3 shadow-sm flex flex-col items-center text-center group hover:border-pink-500/60 hover:shadow-neon-pink transition-all print:bg-white print:border-gray-400 print:text-black print:rounded-xl print:p-2 print:shadow-none print:break-inside-avoid print:page-break-inside-avoid"
+                      >
+                        {/* Top Lanyard Header */}
+                        <div
+                          className={`w-full text-white text-[9px] font-black uppercase tracking-wider py-0.5 px-1 rounded-md mb-2 print:mb-1 flex items-center justify-between ${
+                            isPlayer
+                              ? 'bg-gradient-to-r from-purple-700 via-pink-600 to-purple-700 print:from-slate-800 print:to-slate-800'
+                              : 'bg-gradient-to-r from-amber-600 via-purple-700 to-amber-600 print:from-slate-800 print:to-slate-800'
+                          }`}
+                        >
+                          <span>LVM</span>
+                          <span>{isPlayer ? 'ATLET' : 'OFFICIAL'}</span>
+                        </div>
 
-                      <div className="w-20 h-26 sm:w-22 sm:h-28 print:w-16 print:h-22 rounded-xl bg-purple-50 dark:bg-[#1f0e3f] border border-purple-200 dark:border-purple-800/80 overflow-hidden flex items-center justify-center mb-2 print:mb-1 shadow-xs group-hover:scale-105 transition-transform print:border-gray-300">
-                        {member.photoUrl ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            src={member.photoUrl}
-                            alt={member.fullName}
-                            className="w-full h-full object-cover"
-                          />
-                        ) : (
-                          <User className="w-8 h-8 text-purple-400 print:text-gray-500" />
-                        )}
-                      </div>
+                        <div className="w-full flex items-center justify-between text-[10px] mb-1.5 print:mb-1 font-mono">
+                          <span className="text-slate-500 dark:text-purple-400/60 print:text-gray-600 truncate max-w-[65px]">{member.regNumber}</span>
+                          {isPlayer ? (
+                            <span className="w-5 h-5 rounded-md bg-pink-600 print:bg-slate-900 text-white font-black flex items-center justify-center text-[10px] shadow-xs">
+                              #{member.jerseyNumber || '-'}
+                            </span>
+                          ) : (
+                            <span className="px-1.5 py-0.5 rounded-md bg-amber-500/20 dark:bg-amber-400/20 text-amber-700 dark:text-amber-300 print:bg-slate-200 print:text-black font-black text-[9px] uppercase tracking-wider">
+                              {member.teamRole === 'Team Manager' ? 'MGR' : member.teamRole === 'Head Coach' ? 'PELATIH' : member.teamRole === 'Assistant Pelatih' ? 'ASST' : 'OFF'}
+                            </span>
+                          )}
+                        </div>
 
-                      <h4 className="font-bold text-xs print:text-[11px] text-slate-900 dark:text-white print:text-black truncate w-full">
-                        {member.fullName || '(Belum Diisi)'}
-                      </h4>
-                      <p className="text-[10px] print:text-[9px] text-pink-600 dark:text-pink-400 print:text-black font-black uppercase tracking-wide truncate w-full">
-                        {member.position || 'Pemain'}
-                      </p>
-                      <p className="text-[10px] print:text-[9px] text-slate-500 dark:text-purple-400/70 print:text-gray-600 truncate w-full mt-0.5 print:mt-0">
-                        {team.name}
-                      </p>
-                    </div>
-                  ))
+                        <div className="w-20 h-26 sm:w-22 sm:h-28 print:w-16 print:h-22 rounded-xl bg-purple-50 dark:bg-[#1f0e3f] border border-purple-200 dark:border-purple-800/80 overflow-hidden flex items-center justify-center mb-2 print:mb-1 shadow-xs group-hover:scale-105 transition-transform print:border-gray-300">
+                          {member.photoUrl ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={member.photoUrl}
+                              alt={member.fullName}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <User className="w-8 h-8 text-purple-400 print:text-gray-500" />
+                          )}
+                        </div>
+
+                        <h4 className="font-bold text-xs print:text-[11px] text-slate-900 dark:text-white print:text-black truncate w-full">
+                          {member.fullName || '(Belum Diisi)'}
+                        </h4>
+                        <p
+                          className={`text-[10px] print:text-[9px] font-black uppercase tracking-wide truncate w-full ${
+                            isPlayer
+                              ? 'text-pink-600 dark:text-pink-400 print:text-black'
+                              : 'text-amber-600 dark:text-amber-400 print:text-black'
+                          }`}
+                        >
+                          {isPlayer ? (member.position || 'Pemain') : member.teamRole}
+                        </p>
+                        <p className="text-[10px] print:text-[9px] text-slate-500 dark:text-purple-400/70 print:text-gray-600 truncate w-full mt-0.5 print:mt-0">
+                          {team.name}
+                        </p>
+                      </div>
+                    );
+                  })
                 )}
               </div>
             </div>
