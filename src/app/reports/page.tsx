@@ -12,7 +12,8 @@ import {
   GraduationCap, 
   Building, 
   User, 
-  RefreshCw 
+  RefreshCw,
+  Shield
 } from 'lucide-react';
 import { Team, Member } from '@/lib/types';
 import { exportReport1ToExcel, exportReport2ToExcel, exportReport3ToExcel } from '@/lib/exportExcel';
@@ -28,6 +29,7 @@ export default function ReportsPage() {
   // Filters
   const [selectedRegion, setSelectedRegion] = useState<string>('ALL');
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
+  const [selectedVerificationStatus, setSelectedVerificationStatus] = useState<'ALL' | 'VERIFIED' | 'UNVERIFIED'>('ALL');
   const [selectedTeamId, setSelectedTeamId] = useState<string>('ALL');
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -51,12 +53,38 @@ export default function ReportsPage() {
     fetchTeams();
   }, []);
 
-  const filteredTeams = teams.filter(t => {
-    const matchesRegion = selectedRegion === 'ALL' || t.region === selectedRegion;
-    const matchesCategory = selectedCategory === 'ALL' || t.category === selectedCategory;
-    const matchesTeam = selectedTeamId === 'ALL' || t.id === selectedTeamId;
-    return matchesRegion && matchesCategory && matchesTeam;
-  });
+  // Hitungan tim berdasarkan status verifikasi
+  const verifiedCount = useMemo(() => teams.filter(t => t.status === 'Terverifikasi').length, [teams]);
+  const unverifiedCount = useMemo(() => teams.filter(t => t.status !== 'Terverifikasi').length, [teams]);
+
+  // Tim yang memenuhi filter Region, Kategori, dan Status Verifikasi (pilihan opsi dropdown tim)
+  const availableTeamsForSelect = useMemo(() => {
+    return teams.filter(t => {
+      const matchesRegion = selectedRegion === 'ALL' || t.region === selectedRegion;
+      const matchesCategory = selectedCategory === 'ALL' || t.category === selectedCategory;
+      const matchesStatus =
+        selectedVerificationStatus === 'ALL' ||
+        (selectedVerificationStatus === 'VERIFIED' ? t.status === 'Terverifikasi' : t.status !== 'Terverifikasi');
+      return matchesRegion && matchesCategory && matchesStatus;
+    });
+  }, [teams, selectedRegion, selectedCategory, selectedVerificationStatus]);
+
+  // Tim yang lolos seluruh filter termasuk spesifik tim
+  const filteredTeams = useMemo(() => {
+    return availableTeamsForSelect.filter(t => {
+      return selectedTeamId === 'ALL' || t.id === selectedTeamId;
+    });
+  }, [availableTeamsForSelect, selectedTeamId]);
+
+  // Reset filter tim jika tim yang dipilih tidak ada di daftar opsi yang difilter
+  useEffect(() => {
+    if (selectedTeamId !== 'ALL') {
+      const exists = availableTeamsForSelect.some(t => t.id === selectedTeamId);
+      if (!exists) {
+        setSelectedTeamId('ALL');
+      }
+    }
+  }, [availableTeamsForSelect, selectedTeamId]);
 
   // Report 1: Search within teams and members (players & officials)
   const report1Teams = useMemo(() => {
@@ -361,15 +389,26 @@ export default function ReportsPage() {
             <option value="Putri">Putri</option>
           </select>
 
+          {/* Filter Status Verifikasi Panitia */}
+          <select
+            value={selectedVerificationStatus}
+            onChange={e => setSelectedVerificationStatus(e.target.value as 'ALL' | 'VERIFIED' | 'UNVERIFIED')}
+            className="py-1.5 px-2.5 rounded-xl bg-purple-50/50 dark:bg-[#1f0e3f] border border-purple-200/70 dark:border-purple-800/60 text-xs font-bold text-slate-800 dark:text-white focus:outline-none focus:border-pink-500"
+          >
+            <option value="ALL">Semua Status Verifikasi ({teams.length})</option>
+            <option value="VERIFIED">✓ Terverifikasi Panitia ({verifiedCount})</option>
+            <option value="UNVERIFIED">⏳ Belum Diverifikasi ({unverifiedCount})</option>
+          </select>
+
           <select
             value={selectedTeamId}
             onChange={e => setSelectedTeamId(e.target.value)}
             className="py-1.5 px-2.5 rounded-xl bg-purple-50/50 dark:bg-[#1f0e3f] border border-purple-200/70 dark:border-purple-800/60 text-xs text-slate-800 dark:text-white focus:outline-none focus:border-pink-500 max-w-[180px]"
           >
-            <option value="ALL">Semua Tim ({filteredTeams.length})</option>
-            {filteredTeams.map(t => (
+            <option value="ALL">Semua Tim ({availableTeamsForSelect.length})</option>
+            {availableTeamsForSelect.map(t => (
               <option key={t.id} value={t.id}>
-                {t.name} ({t.category})
+                {t.name} ({t.category}) {t.status === 'Terverifikasi' ? '✓' : ''}
               </option>
             ))}
           </select>
@@ -393,12 +432,15 @@ export default function ReportsPage() {
 
       {/* Official Print Header */}
       <div className="hidden print:block text-center border-b-2 border-slate-900 pb-2 mb-3">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src="/lvm-logo.png"
-          alt="Logo Liga Voli Mahasiswa"
-          className="h-12 w-auto mx-auto mb-1 object-contain"
-        />
+        {/* Background warna khusus untuk logo LVM agar teks putih di logo terlihat jelas */}
+        <div className="print-logo-badge inline-block p-1.5 px-4 rounded-xl bg-[#180838] bg-gradient-to-r from-[#180838] via-[#2a0b56] to-[#4c127d] border border-purple-900/60 mb-1.5 shadow-xs">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/lvm-logo.png"
+            alt="Logo Liga Voli Mahasiswa"
+            className="h-12 w-auto object-contain"
+          />
+        </div>
         <h2 className="text-base font-black uppercase text-black">
           LIGA VOLI MAHASISWA (LVM)
         </h2>
@@ -409,7 +451,7 @@ export default function ReportsPage() {
           {activeTab === 'idcards' && 'LEMBAR AKREDITASI & GALERI FOTO RESMI PESERTA'}
         </p>
         <p className="text-[10px] text-gray-500 mt-0.5 font-mono">
-          Tanggal Cetak: {new Date().toLocaleDateString('id-ID', { dateStyle: 'full' })} • Status: Terverifikasi
+          Tanggal Cetak: {new Date().toLocaleDateString('id-ID', { dateStyle: 'full' })} • Status: {selectedVerificationStatus === 'VERIFIED' ? 'Terverifikasi Panitia' : selectedVerificationStatus === 'UNVERIFIED' ? 'Belum Diverifikasi' : 'Terverifikasi'}
         </p>
       </div>
 
@@ -456,7 +498,7 @@ export default function ReportsPage() {
                       {/* Team Header */}
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 mb-3 border-b border-purple-50 dark:border-purple-950 print:border-gray-300 gap-1.5">
                         <div>
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
                             <h3 className="text-sm sm:text-base font-black text-slate-900 dark:text-white print:text-black">
                               {team.name}
                             </h3>
@@ -469,6 +511,16 @@ export default function ReportsPage() {
                             >
                               {team.category}
                             </span>
+                            {team.status === 'Terverifikasi' ? (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60 print:text-black print:border-gray-400">
+                                <BadgeCheck className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+                                Terverifikasi Panitia
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-black px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300 border border-amber-200 dark:border-amber-800/60 print:text-black print:border-gray-400">
+                                Belum Diverifikasi ({team.status})
+                              </span>
+                            )}
                           </div>
                           <p className="text-[11px] text-slate-500 dark:text-purple-400/70 print:text-gray-600 mt-0.5">
                             No. Daftar: <strong className="font-mono font-black text-pink-600 dark:text-pink-400 print:text-black">{team.teamNumber}</strong> • {team.province} (Reg. {team.region})
@@ -567,6 +619,7 @@ export default function ReportsPage() {
                       <th className="py-2.5 px-3">NO. URUT DAFTAR</th>
                       <th className="py-2.5 px-3">NAMA PEMAIN (MAHASISWA)</th>
                       <th className="py-2.5 px-3">TIM / KAMPUS</th>
+                      <th className="py-2.5 px-3">STATUS VERIFIKASI</th>
                       <th className="py-2.5 px-3">NIM</th>
                       <th className="py-2.5 px-3">FAKULTAS</th>
                       <th className="py-2.5 px-3">JURUSAN</th>
@@ -576,7 +629,7 @@ export default function ReportsPage() {
                   <tbody className="divide-y divide-purple-50 dark:divide-purple-950/60 print:divide-gray-200">
                     {searchedReport2Members.length === 0 ? (
                       <tr>
-                        <td colSpan={7} className="py-8 text-center text-slate-400 dark:text-purple-400/60 text-xs italic">
+                        <td colSpan={8} className="py-8 text-center text-slate-400 dark:text-purple-400/60 text-xs italic">
                           Tidak ada mahasiswa atau pemain yang sesuai dengan pencarian &ldquo;{searchTerm}&rdquo;
                         </td>
                       </tr>
@@ -591,6 +644,18 @@ export default function ReportsPage() {
                           </td>
                           <td className="py-2.5 px-3 text-slate-700 dark:text-purple-200 print:text-black font-medium">
                             {team.name}
+                          </td>
+                          <td className="py-2.5 px-3">
+                            {team.status === 'Terverifikasi' ? (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60 print:text-black">
+                                <BadgeCheck className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+                                Terverifikasi
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300 border border-amber-200 dark:border-amber-800/60 print:text-black">
+                                Belum ({team.status})
+                              </span>
+                            )}
                           </td>
                           <td className="py-2.5 px-3 font-mono text-slate-600 dark:text-purple-300 print:text-black">
                             {member.nim || '-'}
@@ -790,7 +855,14 @@ export default function ReportsPage() {
                         </div>
 
                         <div className="w-full flex items-center justify-between text-[10px] mb-1.5 print:mb-1 font-mono">
-                          <span className="text-slate-500 dark:text-purple-400/60 print:text-gray-600 truncate max-w-[65px]">{member.regNumber}</span>
+                          <div className="flex items-center gap-1 min-w-0">
+                            <span className="text-slate-500 dark:text-purple-400/60 print:text-gray-600 truncate max-w-[55px]">{member.regNumber}</span>
+                            {team.status === 'Terverifikasi' && (
+                              <span title="Terverifikasi Panitia">
+                                <BadgeCheck className="w-3 h-3 text-emerald-500 shrink-0" />
+                              </span>
+                            )}
+                          </div>
                           {isPlayer ? (
                             <span className="w-5 h-5 rounded-md bg-pink-600 print:bg-slate-900 text-white font-black flex items-center justify-center text-[10px] shadow-xs">
                               #{member.jerseyNumber || '-'}

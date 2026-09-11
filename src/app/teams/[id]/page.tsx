@@ -9,7 +9,8 @@ import {
   Shirt,
   User,
   BadgeCheck,
-  Loader2
+  Loader2,
+  Shield
 } from 'lucide-react';
 import { Team } from '@/lib/types';
 import LvmLogo from '@/components/LvmLogo';
@@ -200,12 +201,15 @@ export default function TeamDetailPage({ params }: { params: Promise<{ id: strin
 
       {/* Official Printable Header */}
       <div className="hidden print:block text-center border-b-2 border-slate-900 pb-3 mb-4">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src="/lvm-logo.png"
-          alt="Logo Liga Voli Mahasiswa"
-          className="h-14 w-auto mx-auto mb-2 object-contain"
-        />
+        {/* Logo LVM dengan background warna khusus agar teks putih terlihat */}
+        <div className="print-logo-badge inline-block p-1.5 px-4 rounded-xl bg-[#180838] bg-gradient-to-r from-[#180838] via-[#2a0b56] to-[#4c127d] border border-purple-900/60 mb-2 shadow-xs">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/lvm-logo.png"
+            alt="Logo Liga Voli Mahasiswa"
+            className="h-14 w-auto object-contain"
+          />
+        </div>
         <h2 className="text-lg font-black uppercase text-black">
           LIGA VOLI MAHASISWA (LVM)
         </h2>

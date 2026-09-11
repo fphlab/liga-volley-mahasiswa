@@ -65,6 +65,7 @@ export async function exportReport1ToExcel(teams: Team[], filename = 'Report_1_R
         'Nama Tim': team.name,
         'Regional': team.region,
         'Kategori': team.category,
+        'Status Verifikasi': team.status,
         'No Urut Daftar': p.regNumber || '-',
         'No Jersey': p.jerseyNumber || '-',
         'Nama Pemain': p.fullName || '(Belum diisi)',
@@ -94,14 +95,15 @@ export async function exportReport2ToExcel(teams: Team[], filename = 'Report_2_V
         rows.push({
           'No Urut Daftar': m.regNumber || '-',
           'Nama Pemain (Mahasiswa)': m.fullName || '(Belum diisi)',
+          'Nama Tim': team.name,
+          'Regional': team.region,
+          'Kategori': team.category,
+          'Status Verifikasi': team.status,
           'Posisi Bermain': m.position || 'Pemain',
           'Nomor Induk Mahasiswa (NIM)': m.nim || '-',
           'Fakultas': m.faculty || '-',
           'Jurusan': m.major || '-',
           'Tahun Masuk': m.entryYear || '-',
-          'Nama Tim': team.name,
-          'Regional': team.region,
-          'Kategori': team.category,
         });
       });
   });
