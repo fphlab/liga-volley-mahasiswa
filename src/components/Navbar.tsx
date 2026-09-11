@@ -47,10 +47,12 @@ export default function Navbar() {
   const { status, role, subject, logout } = useAuth();
   const isAuthed = status === 'authed' && Boolean(role) && Boolean(subject);
   const badge = isAuthed && role && subject ? roleBadge(role, subject) : null;
+  // Halaman pendaftaran khusus Panpel: disembunyikan dari peran lain.
+  const isPanpel = status === 'authed' && role === 'panpel';
 
   const isRegister = pathname === '/' || pathname === '/register';
   const navLinks = [
-    { href: '/', label: 'Pendaftaran', icon: Plus, active: isRegister },
+    ...(isPanpel ? [{ href: '/', label: 'Pendaftaran', icon: Plus, active: isRegister }] : []),
     { href: '/dashboard', label: 'Dashboard & Tim', icon: LayoutDashboard, active: pathname === '/dashboard' },
     { href: '/reports', label: 'Laporan Resmi', icon: FileText, active: pathname === '/reports' },
   ];
@@ -130,7 +132,7 @@ export default function Navbar() {
               </Link>
             )}
 
-            {isAuthed && (
+            {isPanpel && (
             <>
             {/* Primary Action Button */}
             <Link
@@ -208,6 +210,7 @@ export default function Navbar() {
           <div className="pt-2 border-t border-purple-100 dark:border-purple-950 flex flex-col gap-2">
             {isAuthed ? (
               <>
+              {isPanpel && (
               <Link
               href={isRegister ? '/dashboard' : '/'}
               onClick={() => setMobileMenuOpen(false)}
@@ -225,6 +228,7 @@ export default function Navbar() {
                 </>
               )}
             </Link>
+              )}
               <button
                 type="button"
                 onClick={() => {

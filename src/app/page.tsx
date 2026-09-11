@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
 import {
   MapPin,
   ShieldCheck,
@@ -125,6 +124,14 @@ export default function RootRegisterPage() {
     }
   }, [isProductionHolding, isPanpel]);
 
+  // Halaman pendaftaran khusus Panpel: peran lain langsung diarahkan
+  // ke dashboard dan tidak dapat mengakses halaman ini.
+  useEffect(() => {
+    if (!isProductionHolding && status !== 'loading' && !isPanpel) {
+      router.replace('/dashboard');
+    }
+  }, [isProductionHolding, status, isPanpel, router]);
+
   if (isProductionHolding) {
     return <ProductionLanding />;
   }
@@ -143,35 +150,9 @@ export default function RootRegisterPage() {
   if (!isPanpel) {
     return (
       <div className="max-w-4xl mx-auto space-y-6 pb-16">
-        <div className="text-center space-y-1 sm:space-y-1.5">
-          <h1 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight uppercase">
-            Pendaftaran Tim
-          </h1>
-          <p className="text-xs text-slate-500 dark:text-purple-300/70">
-            Liga Voli Mahasiswa (LVM) • Akses khusus Panpel
-          </p>
-        </div>
-        <div className="bg-white dark:bg-[#15072c] border border-purple-100 dark:border-purple-900/60 rounded-2xl p-6 sm:p-8 shadow-sm">
-          <div className="flex items-start gap-3">
-            <div className="w-9 h-9 rounded-xl bg-pink-100 dark:bg-pink-500/20 text-pink-600 dark:text-pink-400 flex items-center justify-center shrink-0">
-              <ShieldCheck className="w-5 h-5" />
-            </div>
-            <div className="space-y-2">
-              <p className="text-sm font-black text-slate-900 dark:text-white">
-                Pendaftaran tim dilakukan oleh Panpel.
-              </p>
-              <p className="text-xs text-slate-600 dark:text-purple-300/80">
-                Peserta mengelola tim yang di-assign Panpel. Silakan buka dashboard untuk melihat tim Anda.
-              </p>
-              <Link
-                href="/dashboard"
-                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-pink-600 hover:bg-pink-500 text-white text-xs font-black uppercase tracking-wider transition-all"
-              >
-                <span>Ke Dashboard</span>
-                <ArrowRight className="w-4 h-4" />
-              </Link>
-            </div>
-          </div>
+        <div className="bg-white dark:bg-[#15072c] border border-purple-100 dark:border-purple-900/60 rounded-2xl p-10 flex flex-col items-center gap-3 text-center shadow-sm">
+          <Loader2 className="w-6 h-6 text-pink-600 dark:text-pink-400 animate-spin" />
+          <p className="text-xs font-bold text-slate-600 dark:text-purple-200">Mengalihkan ke dashboard...</p>
         </div>
       </div>
     );

@@ -37,7 +37,7 @@ interface AccountCodeEntry {
 
 export default function DashboardPage() {
   const { isProductionHolding } = useAppMode();
-  const { role, logout } = useAuth();
+  const { role, ownerCode, logout } = useAuth();
   const [teams, setTeams] = useState<Team[]>([]);
   const [quota, setQuota] = useState<RegionalQuota[]>([]);
   const [loading, setLoading] = useState(true);
@@ -53,7 +53,6 @@ export default function DashboardPage() {
   const [bindPicker, setBindPicker] = useState<Record<string, string>>({});
 
   const isPanpel = role === 'panpel';
-  const isMojisport = role === 'mojisport';
 
   const handleAuthError = useCallback(
     async (res: Response, data: { error?: string } | null, fallback: string): Promise<boolean> => {
@@ -384,6 +383,14 @@ export default function DashboardPage() {
     return matchesSearch && matchesRegion && matchesCategory;
   });
 
+  // Tim milik peserta yang login selalu di urutan paling atas.
+  const isOwnTeam = (team: Team) =>
+    Boolean(ownerCode) && (team.ownerCode ?? '') !== '' && team.ownerCode === ownerCode;
+  const sortedTeams = [...filteredTeams].sort((a, b) => Number(isOwnTeam(b)) - Number(isOwnTeam(a)));
+
+  // Hanya Panpel atau pemilik tim yang dapat mengelola; sisanya read-only.
+  const canManageTeam = (team: Team) => isPanpel || isOwnTeam(team);
+
   const totalRegisteredTeams = teams.length;
   const maxTotalTeams = 36;
   const totalCompletedTeams = teams.filter(t => t.status === 'Lengkap' || t.status === 'Terverifikasi').length;
@@ -393,9 +400,6 @@ export default function DashboardPage() {
     totalRegisteredPersonnel += t.members.filter(m => m.fullName && m.fullName.trim() !== '').length;
   });
   const maxPersonnel = 36 * 20;
-
-  const rosterLabel = isMojisport ? 'Lihat' : 'Roster';
-  const rosterMobileLabel = isMojisport ? 'Lihat Tim' : 'Kelola 20 Personel';
 
   return (
     <div className="space-y-6 sm:space-y-8 pb-16">
@@ -618,7 +622,7 @@ export default function DashboardPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-purple-50 dark:divide-purple-950/60">
-                  {filteredTeams.map(team => {
+                  {sortedTeams.map(team => {
                     const filledCount = team.members.filter(m => m.fullName && m.fullName.trim() !== '').length;
                     const isComplete = filledCount === 20;
                     const boundAccount = isPanpel ? accountForTeam(team) : undefined;
@@ -626,8 +630,13 @@ export default function DashboardPage() {
                     return (
                       <tr key={team.id} className="hover:bg-purple-50/40 dark:hover:bg-purple-950/30 transition-colors">
                         <td className="py-3 px-3">
-                          <div className="font-bold text-slate-900 dark:text-white">
+                          <div className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5 flex-wrap">
                             {team.name}
+                            {isOwnTeam(team) && (
+                              <span className="inline-flex items-center text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-300 dark:border-emerald-500/30">
+                                Tim Anda
+                              </span>
+                            )}
                           </div>
                           <div className="text-[11px] font-mono font-black text-pink-600 dark:text-pink-400 mt-0.5">
                             {team.teamNumber}
@@ -861,10 +870,15 @@ export default function DashboardPage() {
                           <div className="flex items-center justify-end gap-1.5">
                             <Link
                               href={`/teams/${team.id}/roster`}
-                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold bg-pink-600 hover:bg-pink-500 text-white transition-all shadow-xs"
+                              title={canManageTeam(team) ? 'Kelola roster' : 'Lihat roster (read-only)'}
+                              className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-xs ${
+                                canManageTeam(team)
+                                  ? 'bg-pink-600 hover:bg-pink-500 text-white'
+                                  : 'bg-slate-100 hover:bg-slate-200 text-slate-600 dark:bg-purple-950/60 dark:hover:bg-purple-900/60 dark:text-purple-300 border border-purple-100 dark:border-purple-900/60'
+                              }`}
                             >
                               <Users className="w-3 h-3" />
-                              {rosterLabel}
+                              {canManageTeam(team) ? 'Roster' : 'Lihat'}
                             </Link>
                             <Link
                               href={`/teams/${team.id}`}
@@ -893,7 +907,7 @@ export default function DashboardPage() {
 
             {/* Mobile Cards View */}
             <div className="md:hidden space-y-3 mt-3">
-              {filteredTeams.map(team => {
+              {sortedTeams.map(team => {
                 const filledCount = team.members.filter(m => m.fullName && m.fullName.trim() !== '').length;
                 const boundAccount = isPanpel ? accountForTeam(team) : undefined;
 
@@ -904,8 +918,13 @@ export default function DashboardPage() {
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div>
-                        <h3 className="font-bold text-xs text-slate-900 dark:text-white">
+                        <h3 className="font-bold text-xs text-slate-900 dark:text-white flex items-center gap-1.5 flex-wrap">
                           {team.name}
+                          {isOwnTeam(team) && (
+                            <span className="inline-flex items-center text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-300 dark:border-emerald-500/30">
+                              Tim Anda
+                            </span>
+                          )}
                         </h3>
                         <div className="text-[11px] font-mono text-pink-600 dark:text-pink-400 font-bold mt-0.5">
                           {team.teamNumber}
@@ -1116,10 +1135,15 @@ export default function DashboardPage() {
                     <div className="flex items-center justify-between gap-2 pt-1">
                       <Link
                         href={`/teams/${team.id}/roster`}
-                        className="flex-1 text-center py-2 rounded-lg text-xs font-bold bg-pink-600 hover:bg-pink-500 text-white flex items-center justify-center gap-1.5 shadow-sm"
+                        title={canManageTeam(team) ? 'Kelola roster' : 'Lihat roster (read-only)'}
+                        className={`flex-1 text-center py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 shadow-sm ${
+                          canManageTeam(team)
+                            ? 'bg-pink-600 hover:bg-pink-500 text-white'
+                            : 'bg-white dark:bg-[#15072c] border border-purple-200 dark:border-purple-800 text-slate-600 dark:text-purple-300'
+                        }`}
                       >
                         <Users className="w-3.5 h-3.5" />
-                        <span>{rosterMobileLabel}</span>
+                        <span>{canManageTeam(team) ? 'Kelola 20 Personel' : 'Lihat Tim'}</span>
                       </Link>
 
                       <Link
