@@ -567,6 +567,8 @@ Lihat `docs/09_DAFTAR_46_KODE_AKSES.md` (siap cetak/dibagikan). Ringkasnya:
 
 ## 14. Status Akhir Implementasi (11 September 2026)
 
+> **Update 12 September 2026 (pagi):** DDL §10.1 + tabel `access_accounts` §15.2 **sudah diterapkan langsung ke Supabase project `lvm` via Management API** (token MCP `supabase-fph`). Terverifikasi: kolom `teams.owner_code` ada, tabel `access_accounts` 9 kolom ada, index `teams_owner_code_unique` ada, data utuh (4 tim, 80 anggota, 0 akun). Langkah manual SQL Editor **tidak lagi diperlukan**.
+
 - T1–T10: **kode selesai**, `tsc` 0 error, `lint` bersih, sisa auth lama nol.
 - T11: **selesai** (env, README, docs/07 status, docs/09).
 - T12: QA runtime lolos 17 cek (login 3 peran + case-insensitive, gate guest 401/redirect `/login?from=`, matriks 403, `/api/auth/codes` = 46 kode, logout, halaman `/login`, data existing utuh 4 tim × 20 slot).
