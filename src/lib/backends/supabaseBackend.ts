@@ -204,7 +204,22 @@ export const supabaseBackend: DataBackend = {
       throw new Error(`Gagal menyimpan personel tim: ${membersError.message}`);
     }
 
-    return mapTeamRow(insertedTeam as unknown as TeamRowWithMembers);
+    return {
+      id: insertedTeam.id,
+      teamNumber: insertedTeam.team_number,
+      name: insertedTeam.name,
+      address: insertedTeam.address ?? '',
+      province: insertedTeam.province,
+      region: insertedTeam.region,
+      category: insertedTeam.category,
+      contactPerson: insertedTeam.contact_person ?? '',
+      contactPhone: insertedTeam.contact_phone ?? '',
+      ownerCode: insertedTeam.owner_code ?? '',
+      status: insertedTeam.status,
+      members: [...members].sort((a, b) => a.slotIndex - b.slotIndex),
+      createdAt: insertedTeam.created_at,
+      updatedAt: insertedTeam.updated_at,
+    };
   },
 
   async updateTeamColumns(id: string, patch: Record<string, unknown>): Promise<boolean> {

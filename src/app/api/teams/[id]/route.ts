@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getTeamById, getAllTeams, updateTeam, deleteTeam } from '@/lib/db';
 import { AuthError, requireActor } from '@/lib/auth';
+import { getDataBackend } from '@/lib/backend';
 import type { Team } from '@/lib/types';
 
 export async function GET(
@@ -8,7 +9,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    await requireActor(request);
+    const actor = await requireActor(request);
 
     const { id } = await params;
     const team = await getTeamById(id);
@@ -20,7 +21,21 @@ export async function GET(
       );
     }
 
-    return NextResponse.json({ success: true, team });
+    // Privasi: Peserta hanya boleh melihat data sensitif (NIM, tanggal lahir, kontak) milik timnya sendiri.
+    const safeTeam =
+      actor.role === 'peserta' && (!actor.ownerCode || team.ownerCode !== actor.ownerCode)
+        ? {
+            ...team,
+            contactPhone: '',
+            members: team.members.map((m) => ({
+              ...m,
+              nim: '',
+              birthDate: '',
+            })),
+          }
+        : team;
+
+    return NextResponse.json({ success: true, team: safeTeam });
   } catch (error) {
     if (error instanceof AuthError) {
       return NextResponse.json({ success: false, error: error.message }, { status: error.status });
@@ -80,6 +95,19 @@ export async function PUT(
           );
         }
       }
+      const backend = await getDataBackend();
+      const prevOwnerCode = existingTeam.ownerCode ?? '';
+
+      // Lepaskan ikatan tim pada akun lama jika ada
+      if (prevOwnerCode !== '' && prevOwnerCode !== nextOwnerCode) {
+        await backend.setAccountTeam(prevOwnerCode, null);
+      }
+
+      // Ikat akun baru ke tim ini bila nextOwnerCode tidak kosong
+      if (nextOwnerCode !== '') {
+        await backend.setAccountTeam(nextOwnerCode, id);
+      }
+
       const result = await updateTeam(id, { ownerCode: nextOwnerCode });
       if (!result.success) {
         return NextResponse.json({ success: false, error: result.error }, { status: 400 });

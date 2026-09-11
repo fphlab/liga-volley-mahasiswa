@@ -71,7 +71,7 @@ async function createParticipantAccount(newTeam: Team): Promise<NewAccountResult
 
 export async function GET(request: NextRequest) {
   try {
-    await requireActor(request);
+    const actor = await requireActor(request);
 
     const { searchParams } = new URL(request.url);
     const region = (searchParams.get('region') as Region) || undefined;
@@ -80,9 +80,28 @@ export async function GET(request: NextRequest) {
     const teams = await getAllTeams(region, category);
     const quota = await getQuotaStats();
 
+    // Privasi: Peserta hanya boleh melihat data sensitif (NIM, tanggal lahir, kontak) milik timnya sendiri.
+    // Data tim lain disanitasi agar tidak bocor ke peserta lain.
+    const safeTeams =
+      actor.role === 'peserta'
+        ? teams.map((team) => {
+            const isOwn = Boolean(actor.ownerCode) && team.ownerCode === actor.ownerCode;
+            if (isOwn) return team;
+            return {
+              ...team,
+              contactPhone: '',
+              members: team.members.map((m) => ({
+                ...m,
+                nim: '',
+                birthDate: '',
+              })),
+            };
+          })
+        : teams;
+
     return NextResponse.json({
       success: true,
-      teams,
+      teams: safeTeams,
       quota,
     });
   } catch (error) {

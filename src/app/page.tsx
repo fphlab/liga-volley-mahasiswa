@@ -124,10 +124,14 @@ export default function RootRegisterPage() {
     }
   }, [isProductionHolding, isPanpel]);
 
-  // Halaman pendaftaran khusus Panpel: peran lain langsung diarahkan
-  // ke dashboard dan tidak dapat mengakses halaman ini.
+  // Halaman pendaftaran khusus Panpel:
+  // - Pengunjung belum login (guest) langsung diarahkan ke /login
+  // - Pengguna terautentikasi non-panpel diarahkan ke /dashboard
   useEffect(() => {
-    if (!isProductionHolding && status !== 'loading' && !isPanpel) {
+    if (isProductionHolding || status === 'loading') return;
+    if (status === 'guest') {
+      router.replace('/login');
+    } else if (!isPanpel) {
       router.replace('/dashboard');
     }
   }, [isProductionHolding, status, isPanpel, router]);
@@ -142,6 +146,17 @@ export default function RootRegisterPage() {
         <div className="bg-white dark:bg-[#15072c] border border-purple-100 dark:border-purple-900/60 rounded-2xl p-10 flex flex-col items-center gap-3 text-center shadow-sm">
           <Loader2 className="w-6 h-6 text-pink-600 dark:text-pink-400 animate-spin" />
           <p className="text-xs font-bold text-slate-600 dark:text-purple-200">Memeriksa hak akses...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (status === 'guest') {
+    return (
+      <div className="max-w-4xl mx-auto space-y-6 pb-16">
+        <div className="bg-white dark:bg-[#15072c] border border-purple-100 dark:border-purple-900/60 rounded-2xl p-10 flex flex-col items-center gap-3 text-center shadow-sm">
+          <Loader2 className="w-6 h-6 text-pink-600 dark:text-pink-400 animate-spin" />
+          <p className="text-xs font-bold text-slate-600 dark:text-purple-200">Mengalihkan ke halaman login...</p>
         </div>
       </div>
     );

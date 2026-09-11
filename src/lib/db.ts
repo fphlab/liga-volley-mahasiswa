@@ -496,21 +496,11 @@ export function updateMember(teamId: string, memberId: string, updates: Partial<
         }
       }
 
-      // Hitung ulang status kelengkapan tim dari fullName non-kosong (trim).
-      // Bila 0 slot terisi, biarkan status apa adanya (paritas logika lama).
-      const fullNames = await backend.listMemberFullNames(teamId);
-      const filledCount = fullNames.filter(n => n.trim() !== '').length;
-
-      let nextStatus: Team['status'] | null = null;
-      if (filledCount === 20) {
-        nextStatus = 'Lengkap';
-      } else if (filledCount > 0) {
-        nextStatus = 'Draft';
-      }
-
-      if (nextStatus) {
-        await backend.updateTeamColumns(teamId, { status: nextStatus });
-      }
+      // Status tim tidak ditimpa secara implisit saat mengedit personel:
+      // - Tim 'Terverifikasi' tidak boleh kehilangan verifikasinya (kuota hangus).
+      // - Tim 'Lengkap' tidak boleh turun ke 'Draft' saat koreksi administratif.
+      // - Tim 'Draft' hanya beralih ke 'Lengkap' saat pengguna/panitia secara eksplisit
+      //   menekan finalisasi pendaftaran (PUT /api/teams/:id dengan { status: 'Lengkap' }).
 
       return { success: true, member: updated };
     } catch (error) {

@@ -16,6 +16,29 @@ function isPublicPage(pathname: string): boolean {
   return pathname === '/login' || pathname.startsWith('/login/') || pathname === '/production' || pathname.startsWith('/production/');
 }
 
+function enforceSessionGate(request: NextRequest): NextResponse {
+  const actor = verifySessionToken(request.cookies.get(SESSION_COOKIE)?.value);
+  if (actor) {
+    return NextResponse.next();
+  }
+  const { pathname } = request.nextUrl;
+  if (pathname.startsWith('/api/') || pathname === '/api') {
+    if (PUBLIC_API_PATHS.has(pathname)) {
+      return NextResponse.next();
+    }
+    return NextResponse.json(
+      { success: false, error: 'Autentikasi diperlukan.' },
+      { status: 401 }
+    );
+  }
+  if (isPublicPage(pathname)) {
+    return NextResponse.next();
+  }
+  return NextResponse.redirect(
+    new URL('/login?from=' + encodeURIComponent(pathname), request.url)
+  );
+}
+
 export function proxy(request: NextRequest) {
   const envConfig = process.env.NEXT_PUBLIC_PRODUCTION_MODE;
   // If explicitly set, respect the setting ('true' or 'false').
@@ -25,34 +48,13 @@ export function proxy(request: NextRequest) {
       ? envConfig === 'true'
       : process.env.NODE_ENV === 'production';
 
-  // In non-production or when holding mode is disabled, enforce the session gate
-  if (!isHolding) {
-    const actor = verifySessionToken(request.cookies.get(SESSION_COOKIE)?.value);
-    if (actor) {
-      return NextResponse.next();
-    }
-    const { pathname } = request.nextUrl;
-    if (pathname.startsWith('/api/') || pathname === '/api') {
-      if (PUBLIC_API_PATHS.has(pathname)) {
-        return NextResponse.next();
-      }
-      return NextResponse.json(
-        { success: false, error: 'Autentikasi diperlukan.' },
-        { status: 401 }
-      );
-    }
-    if (isPublicPage(pathname)) {
-      return NextResponse.next();
-    }
-    return NextResponse.redirect(
-      new URL('/login?from=' + encodeURIComponent(pathname), request.url)
-    );
-  }
-
-  // Allow access if user has bypassed the holding display
+  // Jika holding mode tidak aktif, atau pengunjung sudah mem-bypass holding landing ('lvm_portal_bypass=1'):
+  // Tegakkan session gate untuk seluruh akses halaman & API.
   const bypassCookie = request.cookies.get('lvm_portal_bypass');
-  if (bypassCookie?.value === '1') {
-    return NextResponse.next();
+  const isBypassed = bypassCookie?.value === '1';
+
+  if (!isHolding || isBypassed) {
+    return enforceSessionGate(request);
   }
 
   const { pathname } = request.nextUrl;
@@ -62,7 +64,12 @@ export function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // In production holding mode, block API requests completely
+  // Jika operator/pengguna langsung mengakses halaman login atau API publik autentikasi
+  if (isPublicPage(pathname) || PUBLIC_API_PATHS.has(pathname)) {
+    return enforceSessionGate(request);
+  }
+
+  // In production holding mode (tanpa bypass), block other API requests completely
   if (pathname.startsWith('/api')) {
     return NextResponse.json(
       { error: 'Not Found' },
