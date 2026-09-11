@@ -135,7 +135,6 @@ export default function ReportsPage() {
     });
   }, [filteredTeams, searchTerm]);
 
-  const [report2RoleFilter, setReport2RoleFilter] = useState<'PEMAIN' | 'ALL' | 'OFFICIAL'>('PEMAIN');
   const [idCardRoleFilter, setIdCardRoleFilter] = useState<'ALL' | 'PEMAIN' | 'OFFICIAL'>('ALL');
 
   const allFilteredMembers = useMemo(() => {
@@ -148,16 +147,16 @@ export default function ReportsPage() {
     return list;
   }, [filteredTeams]);
 
+  // Report 2: Khusus verifikasi data akademik mahasiswa (Pemain saja, official tim tidak diikutsertakan)
   const searchedReport2Members = useMemo(() => {
     return allFilteredMembers.filter(({ team, member }) => {
-      if (report2RoleFilter === 'PEMAIN' && member.teamRole !== 'Pemain') return false;
-      if (report2RoleFilter === 'OFFICIAL' && member.teamRole === 'Pemain') return false;
+      // Hanya pemain (mahasiswa aktif)
+      if (member.teamRole !== 'Pemain') return false;
 
       if (!searchTerm.trim()) return true;
       const term = searchTerm.toLowerCase();
       return (
         (member.fullName && member.fullName.toLowerCase().includes(term)) ||
-        (member.teamRole && member.teamRole.toLowerCase().includes(term)) ||
         (member.nim && member.nim.toLowerCase().includes(term)) ||
         (member.faculty && member.faculty.toLowerCase().includes(term)) ||
         (member.major && member.major.toLowerCase().includes(term)) ||
@@ -169,7 +168,7 @@ export default function ReportsPage() {
         team.province.toLowerCase().includes(term)
       );
     });
-  }, [allFilteredMembers, report2RoleFilter, searchTerm]);
+  }, [allFilteredMembers, searchTerm]);
 
   const searchedIdCards = useMemo(() => {
     return allFilteredMembers.filter(({ team, member }) => {
@@ -381,7 +380,7 @@ export default function ReportsPage() {
             <>Total: <strong className="text-pink-600 dark:text-pink-400 font-bold">{report1Teams.length}</strong> Tim</>
           )}
           {activeTab === 'report2' && (
-            <>Total: <strong className="text-pink-600 dark:text-pink-400 font-bold">{searchedReport2Members.length}</strong> {report2RoleFilter === 'PEMAIN' ? 'Mahasiswa' : report2RoleFilter === 'OFFICIAL' ? 'Official' : 'Personel'}</>
+            <>Total: <strong className="text-pink-600 dark:text-pink-400 font-bold">{searchedReport2Members.length}</strong> Mahasiswa (Pemain)</>
           )}
           {activeTab === 'report3' && (
             <>Total: <strong className="text-pink-600 dark:text-pink-400 font-bold">{report3Teams.length}</strong> Tim</>
@@ -547,55 +546,17 @@ export default function ReportsPage() {
           {/* TAB 2: REPORT 2 */}
           {activeTab === 'report2' && (
             <div className="bg-white dark:bg-[#15072c] border border-purple-100 dark:border-purple-900/60 rounded-2xl p-5 shadow-sm transition-colors print:bg-white print:border-gray-400 print:p-3">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 mb-3 border-b border-purple-50 dark:border-purple-950 print:border-gray-300">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 mb-3 border-b border-purple-50 dark:border-purple-950 print:border-gray-300">
                 <div>
                   <h3 className="text-sm sm:text-base font-black text-slate-900 dark:text-white print:text-black uppercase">
                     REPORT 2: Verifikasi Data Akademik Mahasiswa
                   </h3>
                   <p className="text-[11px] text-slate-500 dark:text-purple-400/70 print:text-gray-600">
-                    Memastikan keabsahan status mahasiswa aktif dari masing-masing perguruan tinggi (PDDikti)
+                    Khusus verifikasi keabsahan status mahasiswa aktif (Pemain/Atlet) dari masing-masing perguruan tinggi (PDDikti)
                   </p>
                 </div>
-                <div className="flex items-center gap-2 print:hidden">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider hidden sm:inline">Filter:</span>
-                  <div className="inline-flex rounded-xl bg-purple-50/70 dark:bg-[#1f0e3f] p-0.5 border border-purple-200/60 dark:border-purple-800/60">
-                    <button
-                      type="button"
-                      onClick={() => setReport2RoleFilter('PEMAIN')}
-                      className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                        report2RoleFilter === 'PEMAIN'
-                          ? 'bg-pink-600 text-white shadow-xs'
-                          : 'text-slate-600 dark:text-purple-300 hover:text-slate-900 dark:hover:text-white'
-                      }`}
-                    >
-                      Pemain Mahasiswa ({allFilteredMembers.filter(m => m.member.teamRole === 'Pemain').length})
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setReport2RoleFilter('ALL')}
-                      className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                        report2RoleFilter === 'ALL'
-                          ? 'bg-pink-600 text-white shadow-xs'
-                          : 'text-slate-600 dark:text-purple-300 hover:text-slate-900 dark:hover:text-white'
-                      }`}
-                    >
-                      Semua Personel ({allFilteredMembers.length})
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setReport2RoleFilter('OFFICIAL')}
-                      className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                        report2RoleFilter === 'OFFICIAL'
-                          ? 'bg-pink-600 text-white shadow-xs'
-                          : 'text-slate-600 dark:text-purple-300 hover:text-slate-900 dark:hover:text-white'
-                      }`}
-                    >
-                      Official Saja ({allFilteredMembers.filter(m => m.member.teamRole !== 'Pemain').length})
-                    </button>
-                  </div>
-                </div>
                 <span className="text-xs font-mono font-black text-pink-600 dark:text-pink-400 print:text-black shrink-0">
-                  Total {searchedReport2Members.length} {report2RoleFilter === 'PEMAIN' ? 'Mahasiswa' : report2RoleFilter === 'OFFICIAL' ? 'Official' : 'Personel'}
+                  Total {searchedReport2Members.length} Mahasiswa (Pemain)
                 </span>
               </div>
 
@@ -604,7 +565,7 @@ export default function ReportsPage() {
                   <thead>
                     <tr className="border-b border-purple-100 dark:border-purple-900/60 print:border-gray-400 text-slate-700 dark:text-pink-400 print:text-black font-black uppercase tracking-wider">
                       <th className="py-2.5 px-3">NO. URUT DAFTAR</th>
-                      <th className="py-2.5 px-3">NAMA PEMAIN / PERSONEL</th>
+                      <th className="py-2.5 px-3">NAMA PEMAIN (MAHASISWA)</th>
                       <th className="py-2.5 px-3">TIM / KAMPUS</th>
                       <th className="py-2.5 px-3">NIM</th>
                       <th className="py-2.5 px-3">FAKULTAS</th>
@@ -616,7 +577,7 @@ export default function ReportsPage() {
                     {searchedReport2Members.length === 0 ? (
                       <tr>
                         <td colSpan={7} className="py-8 text-center text-slate-400 dark:text-purple-400/60 text-xs italic">
-                          Tidak ada personel atau mahasiswa yang sesuai dengan pencarian &ldquo;{searchTerm}&rdquo;
+                          Tidak ada mahasiswa atau pemain yang sesuai dengan pencarian &ldquo;{searchTerm}&rdquo;
                         </td>
                       </tr>
                     ) : (
@@ -627,11 +588,6 @@ export default function ReportsPage() {
                           </td>
                           <td className="py-2.5 px-3 font-bold text-slate-900 dark:text-white print:text-black">
                             {member.fullName || <span className="text-slate-400 dark:text-purple-400/40 italic">(Belum diisi)</span>}
-                            {member.teamRole !== 'Pemain' && (
-                              <span className="ml-1.5 text-[10px] text-pink-600 dark:text-pink-400 print:text-gray-600 font-bold">
-                                [{member.teamRole}]
-                              </span>
-                            )}
                           </td>
                           <td className="py-2.5 px-3 text-slate-700 dark:text-purple-200 print:text-black font-medium">
                             {team.name}

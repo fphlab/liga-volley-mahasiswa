@@ -88,20 +88,22 @@ export async function exportReport2ToExcel(teams: Team[], filename = 'Report_2_V
   const rows: ReportRow[] = [];
 
   teams.forEach(team => {
-    team.members.forEach(m => {
-      rows.push({
-        'No Urut Daftar': m.regNumber || '-',
-        'Nama Personel': m.fullName || '(Belum diisi)',
-        'Peran / Posisi Tim': m.teamRole,
-        'Nomor Induk Mahasiswa (NIM)': m.nim || '-',
-        'Fakultas': m.faculty || '-',
-        'Jurusan': m.major || '-',
-        'Tahun Masuk': m.entryYear || '-',
-        'Nama Tim': team.name,
-        'Regional': team.region,
-        'Kategori': team.category,
+    team.members
+      .filter(m => m.teamRole === 'Pemain')
+      .forEach(m => {
+        rows.push({
+          'No Urut Daftar': m.regNumber || '-',
+          'Nama Pemain (Mahasiswa)': m.fullName || '(Belum diisi)',
+          'Posisi Bermain': m.position || 'Pemain',
+          'Nomor Induk Mahasiswa (NIM)': m.nim || '-',
+          'Fakultas': m.faculty || '-',
+          'Jurusan': m.major || '-',
+          'Tahun Masuk': m.entryYear || '-',
+          'Nama Tim': team.name,
+          'Regional': team.region,
+          'Kategori': team.category,
+        });
       });
-    });
   });
 
   const workbook = new ExcelJS.Workbook();
