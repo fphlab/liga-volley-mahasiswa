@@ -29,6 +29,28 @@ export class BackendError extends Error {
   }
 }
 
+/** Baris akun akses dari tabel `access_accounts` (snake_case mentah dari DB). */
+export interface AccountRow {
+  id: string;
+  code_hash: string;
+  code_enc: string;
+  role: 'panpel' | 'mojisport' | 'peserta';
+  label: string;
+  team_id: string | null;
+  revoked: boolean;
+}
+
+/** Payload pembuatan akun (tanpa kolom created/updated yang diisi DB). */
+export interface AccountInsert {
+  id: string;
+  code_hash: string;
+  code_enc: string;
+  role: 'panpel' | 'mojisport' | 'peserta';
+  label: string;
+  team_id: string | null;
+  revoked: boolean;
+}
+
 /** Kontributor yang harus disediakan setiap backend database */
 export interface DataBackend {
   readonly name: 'supabase' | 'postgres';
@@ -62,6 +84,21 @@ export interface DataBackend {
     memberId: string,
     patch: Record<string, unknown>
   ): Promise<Member | null>;
+
+  /** null = hash tidak dikenal. Akun revoked tetap dikembalikan (ditolak di lapisan auth). */
+  findAccountByHash(hash: string): Promise<AccountRow | null>;
+  /** null = id tidak dikenal */
+  findAccountById(id: string): Promise<AccountRow | null>;
+  listAccounts(): Promise<AccountRow[]>;
+  createAccounts(rows: AccountInsert[]): Promise<void>;
+  /** Hapus seluruh akun akses (khusus bootstrap force / reset). */
+  clearAllAccounts(): Promise<void>;
+  /** Ikat/lepas akun ke tim; false = id akun tidak ditemukan */
+  setAccountTeam(accountId: string, teamId: string | null): Promise<boolean>;
+  /** false = id tidak ditemukan */
+  setAccountRevoked(id: string, revoked: boolean): Promise<boolean>;
+  /** false = id tidak ditemukan */
+  rotateAccountHash(id: string, newHash: string, newEnc: string): Promise<boolean>;
 }
 
 let cachedBackend: DataBackend | null = null;

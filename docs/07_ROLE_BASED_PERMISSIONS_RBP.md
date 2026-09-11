@@ -1,16 +1,19 @@
 # DOKUMEN SPESIFIKASI ROLE-BASED PERMISSIONS (RBP)
-## Sistem Gerbang Sandi & Pembatasan Hak Akses (45 Akun)
+## Sistem Gerbang Sandi & Pembatasan Hak Akses
 ### Liga Voli Mahasiswa Nasional (LVM)
 
 ---
 
 ## 1. Ringkasan Eksekutif
 
-Dokumen ini mendefinisikan rancangan arsitektur dan matriks hak akses (**Role-Based Permissions / RBP**) untuk pembatasan akses portal web resmi `ligavolimahasiswa.org`. Sistem ini menggunakan metode **Single-Field Gatekeeper Access Code** dengan total **45 kode akses** yang dibagi ke dalam **3 Peran (Role)**:
+Dokumen ini mendefinisikan rancangan arsitektur dan matriks hak akses (**Role-Based Permissions / RBP**) untuk pembatasan akses portal web resmi `ligavolimahasiswa.org`. Sistem ini menggunakan metode **Single-Field Gatekeeper Access Code** yang dibagi ke dalam **3 Peran (Role)**:
 
-1. **Panpel (Panitia Pelaksana)**: 5 Kode (`asp1` s/d `asp5`)
-2. **MojiSport (Official Broadcaster & Media Partner)**: 5 Kode (`mojisport1` s/d `mojisport5`)
-3. **Peserta (Tim Universitas / Manajer Tim)**: 35 Kode (`user1` s/d `user35`)
+1. **Panpel (Panitia Pelaksana)**: 5 akun (label `Panpel 1`–`Panpel 5`)
+2. **MojiSport (Official Broadcaster & Media Partner)**: 5 akun (label `MojiSport 1`–`MojiSport 5`)
+3. **Peserta (Tim Universitas / Manajer Tim)**: satu kode acak per tim (label nama kampus; 20 tim pada seed awal, bertambah mengikuti jumlah tim)
+
+> Model kode tetap berpola (`userN` dkk.) sudah diganti kode acak per tim/akun
+> (adendum `docs/08_RENCANA_IMPLEMENTASI_RBP.md` §15–§16). Nilai kode tidak ada di repo.
 
 ---
 
@@ -26,9 +29,9 @@ flowchart TD
     E -- "Salah / Tidak Valid" --> F["Tampilkan Pesan Error\nKode Akses Tidak Terdaftar"]
     F --> C
 
-    E -- "Kode: asp1..asp5" --> G["Role: PANPEL\nFull Administrator Access\nBadge Ungu di Navbar"]
-    E -- "Kode: mojisport1..5" --> H["Role: MOJISPORT\nMedia Partner View-Only\nBadge Biru di Navbar"]
-    E -- "Kode: user1..user35" --> I["Role: PESERTA\nTeam Management Access\nBadge Hijau di Navbar"]
+    E -- "Kode akun Panpel" --> G["Role: PANPEL\nFull Administrator Access\nBadge Ungu di Navbar"]
+    E -- "Kode akun MojiSport" --> H["Role: MOJISPORT\nMedia Partner View-Only\nBadge Biru di Navbar"]
+    E -- "Kode tim peserta" --> I["Role: PESERTA\nTeam Management Access\nBadge Hijau di Navbar"]
 
     G --> D
     H --> D
@@ -41,13 +44,13 @@ flowchart TD
 
 Tabel berikut menjabarkan secara rinci seluruh hak akses fungsional pada sistem:
 
-| No | Modul & Fitur | Panitia Pelaksana (`asp1` - `asp5`) | MojiSport Media (`mojisport1` - `mojisport5`) | Tim Peserta (`user1` - `user35`) | Publik / Belum Login |
+| No | Modul & Fitur | Panitia Pelaksana (5 akun Panpel) | MojiSport Media (5 akun MojiSport) | Tim Peserta (satu kode per tim) | Publik / Belum Login |
 | :-: | :--- | :---: | :---: | :---: | :---: |
 | **1** | **Akses Membuka Website** | ✅ Diizinkan | ✅ Diizinkan | ✅ Diizinkan | ❌ Terkunci (Gatekeeper) |
 | **2** | **Dashboard Utama & Metrik Kuota** | ✅ Lihat Semua | ✅ Lihat Semua | ✅ Lihat Semua | ❌ Terkunci |
 | **3** | **Lihat Daftar Semua Tim & Profil** | ✅ Lihat Semua | ✅ Lihat Semua | ✅ Lihat Semua | ❌ Terkunci |
 | **4** | **Pendaftaran Tim Baru (`/register`)** | ✅ Bebas Daftar | ❌ Tidak Diizinkan | ✅ Sesuai Slot Akun | ❌ Terkunci |
-| **5** | **Input & Edit Roster 20 Personel** | ✅ Semua 36 Tim | ❌ Read-Only (Hanya Lihat) | ✅ **Hanya Tim Sendiri** | ❌ Terkunci |
+| **5** | **Input & Edit Roster 20 Personel** | ✅ Semua tim | ❌ Read-Only (Hanya Lihat) | ✅ **Hanya Tim Sendiri** | ❌ Terkunci |
 | **6** | **Unggah Foto Pemain & Official** | ✅ Semua Tim | ❌ Read-Only | ✅ **Hanya Tim Sendiri** | ❌ Terkunci |
 | **7** | **Verifikasi Tim (Kunci Slot Resmi)** | ✅ **Penuh (Wewenang Panitia)** | ❌ Tidak Diizinkan | ❌ Tidak Diizinkan | ❌ Terkunci |
 | **8** | **Batalkan Verifikasi / Buka Kunci** | ✅ Khusus Panitia | ❌ Tidak Diizinkan | ❌ Tidak Diizinkan | ❌ Terkunci |
@@ -64,7 +67,7 @@ Tabel berikut menjabarkan secara rinci seluruh hak akses fungsional pada sistem:
 ## 4. Rincian & Spesifikasi Tiap Peran
 
 ### 1. Role: Panitia Pelaksana (Panpel)
-- **Daftar Kode Akses**: `asp1`, `asp2`, `asp3`, `asp4`, `asp5` (Total: 5 akun)
+- **Daftar Kode Akses**: 5 akun acak (label `Panpel 1`–`Panpel 5`; nilai dibagikan offline, tidak ada di repo)
 - **Tujuan**: Digunakan oleh tim teknis dan panitia pelaksana pertandingan untuk administrasi operasional.
 - **Wewenang**:
   - Mengelola dan mengedit seluruh data pendaftaran dari seluruh 3 Regional (Barat, Tengah, Timur).
@@ -74,7 +77,7 @@ Tabel berikut menjabarkan secara rinci seluruh hak akses fungsional pada sistem:
   - Mengunduh rekapitulasi data lengkap dalam format Microsoft Excel dan PDF resmi ber-kop.
 
 ### 2. Role: MojiSport (Official Broadcaster & Media Partner)
-- **Daftar Kode Akses**: `mojisport1`, `mojisport2`, `mojisport3`, `mojisport4`, `mojisport5` (Total: 5 akun)
+- **Daftar Kode Akses**: 5 akun acak (label `MojiSport 1`–`MojiSport 5`; nilai dibagikan offline, tidak ada di repo)
 - **Tujuan**: Digunakan oleh tim produksi siaran, komentator, grafis broadcast, dan jurnalis MojiSport.
 - **Wewenang**:
   - Akses baca (*Read-Only*) ke seluruh informasi tim, nomor punggung/jersey, posisi bermain, tinggi & berat badan pemain.
@@ -83,12 +86,12 @@ Tabel berikut menjabarkan secara rinci seluruh hak akses fungsional pada sistem:
   - **Larangan**: Seluruh tombol mutasi data (Simpan, Edit, Hapus, Verifikasi) disembunyikan/dinonaktifkan secara otomatis.
 
 ### 3. Role: Peserta (Manajer Tim / Kampus)
-- **Daftar Kode Akses**: `user1`, `user2`, `user3`, ... s/d `user35` (Total: 35 akun)
+- **Daftar Kode Akses**: satu kode acak per tim (label nama kampus; nilai dibagikan offline, tidak ada di repo)
 - **Tujuan**: Diberikan kepada perwakilan/manajer resmi dari masing-masing perguruan tinggi yang berpartisipasi.
 - **Wewenang**:
   - Mengisi formulir pendaftaran dan mengunggah foto 20 personel (15 pemain dan 5 official) milik kampus mereka sendiri.
   - Melihat data tim lain dalam mode *view-only* untuk transparansi kompetisi.
-  - **Isolasi Data**: Akun `userX` **tidak diizinkan mengubah, menghapus, atau menimpa** data roster tim kampus lain.
+  - **Isolasi Data**: akun peserta **tidak diizinkan mengubah, menghapus, atau menimpa** data roster tim kampus lain.
   - **Kunci Otomatis**: Setelah tim diverifikasi oleh Panitia (`Status: Terverifikasi`), form input otomatis terkunci dan tidak bisa diubah kembali oleh peserta.
 
 ---
@@ -105,9 +108,9 @@ Tabel berikut menjabarkan secara rinci seluruh hak akses fungsional pada sistem:
 
 ### B. Indikator Visual di Antarmuka
 Pada bagian atas (Navbar), akan ditampilkan penanda identitas yang aktif:
-- Panpel: `🛡️ Panpel (asp1)` dengan lencana ungu neon.
-- MojiSport: `📺 MojiSport Media (mojisport1)` dengan lencana biru toska.
-- Peserta: `🏐 Tim Peserta (user1)` dengan lencana hijau/pink.
+- Panpel: `🛡️ Panpel (Panpel 1)` dengan lencana ungu neon.
+- MojiSport: `📺 MojiSport Media (MojiSport 1)` dengan lencana biru toska.
+- Peserta: `🏐 Tim Peserta (UNESA Surabaya)` dengan lencana hijau/pink (label = nama kampus).
 - Tombol **"Keluar"** di samping nama akun untuk berganti kode akses.
 
 ---
@@ -117,7 +120,8 @@ Pada bagian atas (Navbar), akan ditampilkan penanda identitas yang aktif:
 Spesifikasi ini **sudah diimplementasikan penuh** di codebase. Rencana & status per task: `docs/08_RENCANA_IMPLEMENTASI_RBP.md`. Daftar kode siap cetak: `docs/09_DAFTAR_46_KODE_AKSES.md`.
 
 Koreksi & keputusan yang menyimpang dari draf awal dokumen ini:
-- Jumlah kode peserta **36** (`user1`–`user36`), bukan 35 → **total 46 kode**.
+- Jumlah kode peserta mengikuti **jumlah tim** (satu kode acak per tim), bukan angka tetap.
 - Peserta **tidak dapat membuat tim sendiri** (baris 4 matriks di atas dibatalkan); pembuatan tim hanya oleh Panpel.
 - Report 2 untuk Peserta = **hanya tim sendiri**.
 - `ADMIN_SECRET_KEY`/PIN lama **dihapus total**; secret sesi baru `ACCESS_SESSION_SECRET`.
+- Kode berpola lama sudah mati; kode baru acak per tim/akun (adendum docs/08 §15–§16).

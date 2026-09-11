@@ -92,7 +92,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const actor = requireActor(request);
+    const actor = await requireActor(request);
     if (actor.role === 'mojisport') {
       throw new AuthError('Anda tidak memiliki izin untuk aksi ini.', 403);
     }
@@ -251,7 +251,8 @@ export async function DELETE(request: NextRequest) {
     }
 
     // Otorisasi: Panpel ATAU pemegang token delete yang sah dari sesi upload pengguna
-    const isPanpel = getActorFromRequest(request)?.role === 'panpel';
+    const requestActor = await getActorFromRequest(request);
+    const isPanpel = requestActor?.role === 'panpel';
     const isTokenValid = deleteToken && verifyDeleteToken(filename, deleteToken);
 
     if (!isPanpel && !isTokenValid) {

@@ -642,3 +642,85 @@ Gelombang D:  T19
 | Slug id tabrakan | Suffix kategori/nomor otomatis + unique constraint DB |
 | Cookie lama masih valid kriptografis | Ditolak via `v: 2` |
 | Akun direvoke tapi sesi masih hidup | Cek revoke async per request terproteksi; proxy tetap cepat |
+
+---
+
+## 16. Status Adendum §15
+
+### 16.1 Status T13–T18 (12 September 2026)
+
+| Task | Status | Keterangan |
+|---|---|---|
+| T13 · Skema + env | Selesai | Tabel `access_accounts` di `supabase/schema.sql`; `ACCESS_CODE_KEY` + `BOOTSTRAP_SECRET` di `.env.example`; lihat laporan gelombang |
+| T14 · Modul akun + auth async | Selesai | `src/lib/accounts.ts`, backend `findAccountByHash`/`listAccounts`/`createAccounts`/`setRevoked`/`rotateHash`, `resolveAccessCode` async, sesi `v: 2`; lihat laporan gelombang |
+| T15 · Bootstrap satu tembakan | Selesai | `POST /api/admin/bootstrap` (30 kode: 5 Panpel + 5 MojiSport + 20 peserta, ikat otomatis); lihat laporan gelombang |
+| T16 · Auto-generate saat Panpel tambah tim | Selesai | Hook `POST /api/teams` + modal sekali-tampil di form `/`; lihat laporan gelombang |
+| T17 · Panel kode di dashboard | Selesai | Label kampus + Lihat kode + generate ulang + cabut akses; `GET /api/auth/codes` panpel-only; lihat laporan gelombang |
+| T18 · UI label + dokumen (task ini) | Selesai | Badge Navbar generik (tanpa ubah kode — sudah benar); `docs/09` tulis ulang tanpa plaintext; §16 ini; sapuan `README.md` + `docs/07` |
+
+### 16.2 Runbook BARU bootstrap (menggantikan §10.2–§10.3 yang usang)
+
+> §10.1 tetap berlaku untuk `owner_code`, tetapi DDL kini mencakup tabel
+> `access_accounts` (satu run, langkah 1 di bawah). Langkah seed lama §10.2
+> (login Panpel + `POST /api/seed`) dan assign manual §10.3 (pilih `userN` di
+> dashboard) **usang dan digantikan** langkah 2–5 di bawah: bootstrap membuat
+> akun + tim + ikatan sekaligus, dan kode peserta tidak lagi dipilih dari daftar
+> tetap melainkan lahir acak bersama tim.
+
+**Langkah 1 — DDL satu run (manusia via Supabase SQL Editor).**
+
+Jalankan seluruh isi `supabase/schema.sql` terbaru. Isinya mencakup:
+
+- `ALTER TABLE public.teams ADD COLUMN IF NOT EXISTS owner_code ...` + unique
+  partial index (§10.1 — menutup DDL yang tertunda);
+- `CREATE TABLE IF NOT EXISTS public.access_accounts (...)` + trigger
+  `touch_updated_at` + RLS enable tanpa policy (service-role only) — lihat §15.2.
+
+Verifikasi:
+
+```sql
+select column_name from information_schema.columns where table_name = 'teams';
+-- harus memuat owner_code
+select table_name from information_schema.tables where table_name = 'access_accounts';
+-- harus 1 baris
+```
+
+**Langkah 2 — Set secret sementara.**
+
+Di environment server (bukan di repo), set:
+
+- `ACCESS_CODE_KEY` (kunci enkripsi 32 byte, tetap dipakai seterusnya),
+- `ACCESS_SESSION_SECRET` (secret sesi, tetap dipakai seterusnya),
+- `BOOTSTRAP_SECRET` (proteksi bootstrap, **sementara — dihapus langkah 5**).
+
+**Langkah 3 — Panggil bootstrap (satu tembakan).**
+
+```bash
+curl -X POST "$APP_URL/api/admin/bootstrap" \
+  -H 'Content-Type: application/json' \
+  -d "{\"secret\": \"$BOOTSTRAP_SECRET\"}" \
+  -o bootstrap-output.json
+```
+
+(Nilai asli tidak pernah ditulis di dokumen/repo — `$BOOTSTRAP_SECRET` dibaca
+dari environment operator.) Response berisi `{accounts, assignments}` dengan
+**seluruh kode plaintext sekali-tampil**: 5 Panpel + 5 MojiSport + 20 peserta
+terikat ke 20 tim.
+
+**Langkah 4 — Simpan output offline.**
+
+Pindahkan `bootstrap-output.json` ke media offline (di luar repo), dan salin
+kolom Kode tabel `docs/09_DAFTAR_46_KODE_AKSES.md` §2 ke **salinan cetak** (bukan
+commit). Verifikasi cepat: login satu kode tiap peran; `GET /api/auth/codes`
+sebagai Panpel menampilkan 30 akun + ikatan.
+
+**Langkah 5 — Hapus `BOOTSTRAP_SECRET`.**
+
+Hapus variabel `BOOTSTRAP_SECRET` dari environment server dan restart aplikasi.
+Bootstrap yang terpanggil setelahnya harus gagal (secret tidak dikenal).
+
+**Langkah 6 — Distribusi kode.**
+
+Bagikan tiap kode peserta ke manajer kampus terkait + 10 kode peran ke
+pemegangnya melalui jalur offline. Kode hilang → Panpel generate ulang dari
+dashboard (ikatan tim tetap; lihat laporan T17).

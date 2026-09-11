@@ -1,6 +1,6 @@
 import { Team, Member, Region, Category } from '../types';
 import { mapMemberRow, mapTeamRow, MemberRow, TeamRowWithMembers } from '../rowMappers';
-import { BackendError, DataBackend } from '../backend';
+import { AccountInsert, AccountRow, BackendError, DataBackend } from '../backend';
 import { getSupabaseAdmin } from '../supabaseServer';
 
 /**
@@ -328,5 +328,107 @@ export const supabaseBackend: DataBackend = {
       return null;
     }
     return mapMemberRow(data[0] as unknown as MemberRow);
+  },
+
+  async findAccountByHash(hash: string): Promise<AccountRow | null> {
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase
+      .from('access_accounts')
+      .select('id, code_hash, code_enc, role, label, team_id, revoked')
+      .eq('code_hash', hash)
+      .maybeSingle();
+
+    if (error) {
+      throw new Error(`Gagal mencari akun akses: ${error.message}`);
+    }
+    return (data as unknown as AccountRow | null) ?? null;
+  },
+
+  async findAccountById(id: string): Promise<AccountRow | null> {
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase
+      .from('access_accounts')
+      .select('id, code_hash, code_enc, role, label, team_id, revoked')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (error) {
+      throw new Error(`Gagal membaca akun akses: ${error.message}`);
+    }
+    return (data as unknown as AccountRow | null) ?? null;
+  },
+
+  async listAccounts(): Promise<AccountRow[]> {
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase
+      .from('access_accounts')
+      .select('id, code_hash, code_enc, role, label, team_id, revoked')
+      .order('created_at', { ascending: true })
+      .order('id', { ascending: true });
+
+    if (error) {
+      throw new Error(`Gagal mengambil daftar akun akses: ${error.message}`);
+    }
+    return (data as unknown as AccountRow[] | null) ?? [];
+  },
+
+  async createAccounts(rows: AccountInsert[]): Promise<void> {
+    if (rows.length === 0) return;
+    const supabase = getSupabaseAdmin();
+    const { error } = await supabase.from('access_accounts').insert(rows);
+
+    if (error) {
+      throw new Error(`Gagal menyimpan akun akses: ${error.message}`);
+    }
+  },
+
+  async clearAllAccounts(): Promise<void> {
+    const supabase = getSupabaseAdmin();
+    const { error } = await supabase.from('access_accounts').delete().neq('id', '__none__');
+    if (error) {
+      throw new Error(`Gagal mengosongkan tabel akun akses: ${error.message}`);
+    }
+  },
+
+  async setAccountTeam(accountId: string, teamId: string | null): Promise<boolean> {
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase
+      .from('access_accounts')
+      .update({ team_id: teamId })
+      .eq('id', accountId)
+      .select('id');
+
+    if (error) {
+      throw new Error(`Gagal mengikat akun ke tim: ${error.message}`);
+    }
+    return (data ?? []).length > 0;
+  },
+
+  async setAccountRevoked(id: string, revoked: boolean): Promise<boolean> {
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase
+      .from('access_accounts')
+      .update({ revoked })
+      .eq('id', id)
+      .select('id');
+
+    if (error) {
+      throw new Error(`Gagal mengubah status revoke akun: ${error.message}`);
+    }
+    return (data ?? []).length > 0;
+  },
+
+  async rotateAccountHash(id: string, newHash: string, newEnc: string): Promise<boolean> {
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase
+      .from('access_accounts')
+      .update({ code_hash: newHash, code_enc: newEnc })
+      .eq('id', id)
+      .select('id');
+
+    if (error) {
+      throw new Error(`Gagal memperbarui kode akun: ${error.message}`);
+    }
+    return (data ?? []).length > 0;
   },
 };

@@ -8,7 +8,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    requireActor(request);
+    await requireActor(request);
 
     const { id } = await params;
     const team = await getTeamById(id);
@@ -46,7 +46,7 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const actor = requireActor(request);
+    const actor = await requireActor(request);
     const { id } = await params;
     const body = await request.json() as Record<string, unknown>;
 
@@ -150,7 +150,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    requireActor(request, ['panpel']);
+    await requireActor(request, ['panpel']);
 
     const { id } = await params;
     const result = await deleteTeam(id);

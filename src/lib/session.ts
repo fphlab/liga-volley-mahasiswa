@@ -6,12 +6,16 @@ export const SESSION_COOKIE = 'lvm_access_session';
 
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
+const SESSION_VERSION = 2;
+
 const VALID_ROLES: readonly AccessRole[] = ['panpel', 'mojisport', 'peserta'];
 
 interface SessionPayload {
+  v: number;
   sub: string;
   role: AccessRole;
   owner: string;
+  aid: string;
   iat: number;
   exp: number;
 }
@@ -27,9 +31,11 @@ function sign(payloadB64: string, secret: string): string {
 export function createSessionToken(actor: Actor): string {
   const now = Date.now();
   const payload: SessionPayload = {
+    v: SESSION_VERSION,
     sub: actor.subject,
     role: actor.role,
     owner: actor.ownerCode,
+    aid: actor.accountId,
     iat: now,
     exp: now + SESSION_TTL_MS,
   };
@@ -69,8 +75,10 @@ export function verifySessionToken(token: string | undefined | null): Actor | nu
 
   if (
     !payload ||
+    payload.v !== SESSION_VERSION ||
     typeof payload.sub !== 'string' ||
     typeof payload.owner !== 'string' ||
+    typeof payload.aid !== 'string' ||
     typeof payload.exp !== 'number' ||
     !VALID_ROLES.includes(payload.role)
   ) {
@@ -83,6 +91,7 @@ export function verifySessionToken(token: string | undefined | null): Actor | nu
     role: payload.role,
     subject: payload.sub,
     ownerCode: payload.owner,
+    accountId: payload.aid,
   };
 }
 

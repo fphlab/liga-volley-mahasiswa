@@ -8,7 +8,7 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const actor = requireActor(request);
+    const actor = await requireActor(request);
 
     if (actor.role === 'mojisport') {
       throw new AuthError('Anda tidak memiliki izin untuk aksi ini.', 403);

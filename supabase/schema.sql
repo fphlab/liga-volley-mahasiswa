@@ -138,6 +138,31 @@ create trigger members_touch_updated_at
   for each row execute function public.touch_updated_at();
 
 -- ------------------------------------------------------------
+-- 1b. TABEL AKUN AKSES (RBAC §15: kode acak per nama kampus)
+-- ------------------------------------------------------------
+create table if not exists public.access_accounts (
+  id          text primary key,
+  code_hash   text not null unique,
+  code_enc    text not null,
+  role        text not null check (role in ('panpel','mojisport','peserta')),
+  label       text not null,
+  team_id     text references public.teams(id) on delete set null,
+  revoked     boolean not null default false,
+  created_at  timestamptz not null default now(),
+  updated_at  timestamptz not null default now()
+);
+
+create index if not exists access_accounts_role_idx on public.access_accounts (role);
+create index if not exists access_accounts_team_id_idx on public.access_accounts (team_id) where team_id is not null;
+
+drop trigger if exists access_accounts_touch_updated_at on public.access_accounts;
+create trigger access_accounts_touch_updated_at
+  before update on public.access_accounts
+  for each row execute function public.touch_updated_at();
+
+alter table public.access_accounts enable row level security;
+
+-- ------------------------------------------------------------
 -- 5. KEAMANAN (RLS)
 --    Aplikasi mengakses database lewat API routes Next.js memakai
 --    SERVICE ROLE KEY (melewati RLS). Dengan RLS aktif + tanpa policy

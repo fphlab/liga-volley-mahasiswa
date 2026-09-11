@@ -11,7 +11,10 @@ import {
   Building,
   Phone,
   RotateCcw,
-  Loader2
+  Loader2,
+  Copy,
+  Check,
+  KeyRound
 } from 'lucide-react';
 import { Region, Category, RegionalQuota, REGIONS_CONFIG, MAX_TEAMS_PER_REGION_CATEGORY } from '@/lib/types';
 import { useAppMode } from '@/components/AppModeContext';
@@ -36,6 +39,9 @@ export default function RootRegisterPage() {
   const [quotas, setQuotas] = useState<RegionalQuota[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [newAccount, setNewAccount] = useState<{ id: string; label: string; code: string; teamId: string } | null>(null);
+  const [accountWarning, setAccountWarning] = useState<{ message: string; teamId: string } | null>(null);
+  const [copied, setCopied] = useState(false);
 
   // Pulihkan draf tersimpan dari localStorage saat pertama kali dibuka
   useEffect(() => {
@@ -215,7 +221,13 @@ export default function RootRegisterPage() {
         }),
       });
 
-      const data = await res.json();
+      const data = (await res.json()) as {
+        success: boolean;
+        error?: string;
+        team?: { id: string };
+        newAccount?: { id: string; label: string; code: string };
+        accountError?: string;
+      };
 
       if (!data.success) {
         setErrorMsg(data.error || 'Gagal mendaftarkan tim');
@@ -226,13 +238,41 @@ export default function RootRegisterPage() {
         localStorage.removeItem('lvm_team_register_draft');
       } catch {}
 
-      router.push(`/teams/${data.team.id}/roster?new=true`);
+      if (data.newAccount?.code && data.team?.id) {
+        setNewAccount({ ...data.newAccount, teamId: data.team.id });
+        return;
+      }
+
+      if (data.accountError && data.team?.id) {
+        setAccountWarning({ message: data.accountError, teamId: data.team.id });
+        return;
+      }
+
+      router.push(`/teams/${data.team?.id}/roster?new=true`);
     } catch (err) {
       console.error(err);
       setErrorMsg('Terjadi kesalahan koneksi saat mengirim formulir.');
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const handleCopyCode = async () => {
+    if (!newAccount) return;
+    try {
+      await navigator.clipboard.writeText(newAccount.code);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error('Gagal menyalin kode akses:', err);
+    }
+  };
+
+  const handleProceedToRoster = () => {
+    if (!newAccount) return;
+    const teamId = newAccount.teamId;
+    setNewAccount(null);
+    router.push(`/teams/${teamId}/roster?new=true`);
   };
 
   const allProvinces = [
@@ -510,6 +550,77 @@ export default function RootRegisterPage() {
           </div>
         </form>
       </div>
+
+      {accountWarning && (
+        <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-200 text-xs shadow-sm">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+            <div className="space-y-2 flex-1">
+              <p className="font-black uppercase tracking-wider">Tim tersimpan, kode tertunda</p>
+              <p className="font-semibold">{accountWarning.message}</p>
+              <button
+                type="button"
+                onClick={() => router.push(`/teams/${accountWarning.teamId}/roster?new=true`)}
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-pink-600 hover:bg-pink-500 text-white text-xs font-black uppercase tracking-wider transition-all cursor-pointer"
+              >
+                <span>Lanjut ke Roster</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {newAccount && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm">
+          <div className="w-full max-w-md bg-white dark:bg-[#15072c] border border-purple-200 dark:border-purple-800/60 rounded-2xl p-6 sm:p-8 shadow-2xl space-y-5">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-r from-purple-600 to-pink-600 flex items-center justify-center shrink-0 shadow-md">
+                <KeyRound className="w-5 h-5 text-white" />
+              </div>
+              <div>
+                <p className="text-xs font-black uppercase tracking-wider text-slate-900 dark:text-white">
+                  Tim berhasil didaftarkan
+                </p>
+                <p className="text-xs text-slate-500 dark:text-purple-300/70 font-semibold">
+                  {newAccount.label}
+                </p>
+              </div>
+            </div>
+
+            <div className="rounded-xl bg-purple-50 dark:bg-[#1f0e3f] border border-purple-200/70 dark:border-purple-800/60 p-4 text-center space-y-3">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-purple-300/70">
+                Kode akses manajer tim
+              </p>
+              <p className="font-mono text-3xl font-black tracking-[0.2em] text-slate-900 dark:text-white select-all">
+                {newAccount.code}
+              </p>
+              <button
+                type="button"
+                onClick={handleCopyCode}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-black uppercase tracking-wider transition-all cursor-pointer"
+              >
+                {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                <span>{copied ? 'Tersalin' : 'Salin'}</span>
+              </button>
+            </div>
+
+            <div className="flex items-start gap-2.5 p-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-200 text-xs font-semibold">
+              <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+              <span>Kode hanya tampil sekali. Segera bagikan ke manajer tim sebelum menutup panel ini.</span>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleProceedToRoster}
+              className="w-full inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-pink-600 hover:bg-pink-500 text-white text-xs font-black uppercase tracking-wider transition-all cursor-pointer"
+            >
+              <span>Lanjut ke Roster</span>
+              <ArrowRight className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -13,7 +13,7 @@ export async function POST(request: NextRequest) {
 
   try {
     // 2. Hanya peran panpel yang boleh menjalankan seeder, bahkan di development
-    requireActor(request, ['panpel']);
+    await requireActor(request, ['panpel']);
 
     const body = await request.json().catch(() => ({}));
     const force = body?.force === true;

@@ -7,6 +7,9 @@ const PUBLIC_API_PATHS = new Set([
   '/api/auth/logout',
   '/api/auth/session',
   '/api/auth/verify',
+  // Bootstrap satu tembakan: harus bisa dipanggil SEBELUM ada akun apapun
+  // (proteksi berlapis di route: BOOTSTRAP_SECRET + rate-limit + guard kosong).
+  '/api/admin/bootstrap',
 ]);
 
 function isPublicPage(pathname: string): boolean {

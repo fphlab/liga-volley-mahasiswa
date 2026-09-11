@@ -64,7 +64,7 @@ node --env-file=.env.local scripts/migrate-json-to-supabase.mjs --force # kosong
 
 ### Seed 20 tim nyata (data resmi event)
 
-Seeder mengisi database dengan **20 tim nyata** (Tengah 5 Putra + 4 Putri, Timur 5 Putra + 6 Putri, Barat kosong), masing-masing berstatus `Draft` dengan 20 slot personel kosong dan tanpa pemilik. Endpoint seeder **hanya untuk Panpel** (wajib login kode `asp1`–`asp5`) dan **diblokir total di production**:
+Seeder mengisi database dengan **20 tim nyata** (Tengah 5 Putra + 4 Putri, Timur 5 Putra + 6 Putri, Barat kosong), masing-masing berstatus `Draft` dengan 20 slot personel kosong dan tanpa pemilik. Endpoint seeder **hanya untuk Panpel** (wajib login salah satu akun Panpel) dan **diblokir total di production**:
 
 ```bash
 # via API (mode development, login Panpel dulu agar cookie sesi terkirim)
@@ -73,7 +73,7 @@ curl -X POST http://localhost:3000/api/seed -H 'Content-Type: application/json' 
 curl -X POST http://localhost:3000/api/seed -H 'Content-Type: application/json' -d '{"force": true}' -b cookies.txt -c cookies.txt
 ```
 
-> Login dulu: `POST /api/auth/login` dengan body `{"code": "asp1"}` dan simpan cookie-nya (flag `-c`/`-b` di atas).
+> Login dulu: `POST /api/auth/login` dengan body `{"code": "<KODE_PANPEL>"}` (kode acak dibagikan offline, tidak ada di repo) dan simpan cookie-nya (flag `-c`/`-b` di atas).
 
 ## Menjalankan
 
@@ -86,7 +86,7 @@ Buka [http://localhost:3000](http://localhost:3000).
 
 ## Fitur
 
-- **Gerbang kode akses (46 kode, RBP)** — satu kolom "Kode Akses" di `/login`; sesi cookie HttpOnly 7 hari. Panpel (`asp1`–`asp5`): admin penuh. MojiSport (`mojisport1`–`mojisport5`): read-only + laporan. Peserta (`user1`–`user36`): hanya tim sendiri. Tanpa login tidak bisa melihat atau mengubah apa pun. Lihat `docs/07_ROLE_BASED_PERMISSIONS_RBP.md` dan `docs/09_DAFTAR_46_KODE_AKSES.md`
+- **Gerbang kode akses acak per tim/akun (RBP)** — satu kolom "Kode Akses" di `/login`; sesi cookie HttpOnly 7 hari. Panpel (label `Panpel 1`–`Panpel 5`): admin penuh. MojiSport (label `MojiSport 1`–`MojiSport 5`): read-only + laporan. Peserta: satu kode acak per tim, label nama kampus, hanya tim sendiri. Tanpa login tidak bisa melihat atau mengubah apa pun. Nilai kode tidak ada di repo (dibagikan offline). Lihat `docs/07_ROLE_BASED_PERMISSIONS_RBP.md` dan `docs/09_DAFTAR_46_KODE_AKSES.md`
 - **Pendaftaran tim (Panpel saja)** dengan validasi kuota regional real-time dan penomoran otomatis `LVM-BRT/TGH/TMR-PA/PI-NN` (anti duplikat: mengisi celah nomor terendah yang bebas)
 - **Formulir 20 personel** per tim: NIM, fakultas/jurusan, posisi bermain, tinggi/berat, nomor jersey unik (divalidasi ganda: aplikasi + unique index DB), upload foto jersey (JPG/PNG/WebP maks 5MB, divalidasi magic bytes)
 - **Verifikasi panitia**: roster 20/20 dapat diverifikasi; setiap edit pasca-verifikasi menurunkan status kembali
@@ -101,7 +101,7 @@ src/lib/backend.ts                   # Kontrak backend + pemilihan via env
 src/lib/backends/pgBackend.ts        # Adapter PostgreSQL langsung (lokal)
 src/lib/backends/supabaseBackend.ts  # Adapter Supabase/PostgREST (cloud)
 src/lib/supabaseServer.ts            # Klien admin service-role (server-only)
-src/lib/accessCodes.ts               # 46 kode akses + peran (server-only)
+src/lib/accessCodes.ts               # Peran + label akun (nilai kode acak hanya di DB, server-only)
 src/lib/session.ts                   # Cookie sesi HMAC-SHA256 7 hari (server-only)
 src/lib/auth.ts                      # Guard sesi: getActorFromRequest/verifyActor/requireActor
 src/components/AuthContext.tsx       # Sesi & peran di sisi klien (useAuth)

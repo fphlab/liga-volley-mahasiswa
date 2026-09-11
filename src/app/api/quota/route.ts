@@ -4,7 +4,7 @@ import { AuthError, requireActor } from '@/lib/auth';
 
 export async function GET(request: NextRequest) {
   try {
-    requireActor(request);
+    await requireActor(request);
 
     const quota = await getQuotaStats();
     return NextResponse.json({ success: true, quota });

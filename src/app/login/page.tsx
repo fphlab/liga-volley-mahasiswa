@@ -104,7 +104,7 @@ function LoginForm() {
                 type="text"
                 value={code}
                 onChange={(e) => setCode(e.target.value)}
-                placeholder="cth: asp1, mojisport1, user1"
+                placeholder="cth: A3FO7VU"
                 autoComplete="off"
                 autoFocus
                 disabled={submitting}

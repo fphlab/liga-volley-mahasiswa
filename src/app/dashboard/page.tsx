@@ -25,11 +25,14 @@ import { useAppMode } from '@/components/AppModeContext';
 import { useAuth } from '@/components/AuthContext';
 import ProductionLanding from '@/components/ProductionLanding';
 
-interface OwnerCodeEntry {
-  code: string;
+interface AccountCodeEntry {
+  id: string;
+  label: string;
   role: string;
-  usedByTeamId: string | null;
-  usedByTeamName: string | null;
+  code: string;
+  teamId: string | null;
+  teamName: string | null;
+  revoked: boolean;
 }
 
 export default function DashboardPage() {
@@ -41,10 +44,13 @@ export default function DashboardPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedRegion, setSelectedRegion] = useState<string>('ALL');
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
-  const [codes, setCodes] = useState<OwnerCodeEntry[]>([]);
+  const [codes, setCodes] = useState<AccountCodeEntry[]>([]);
   const [codesLoading, setCodesLoading] = useState(true);
-  const [draftOwner, setDraftOwner] = useState<Record<string, string>>({});
-  const [savingOwnerId, setSavingOwnerId] = useState<string | null>(null);
+  const [revealed, setRevealed] = useState<Record<string, boolean>>({});
+  const [freshCodes, setFreshCodes] = useState<Record<string, string>>({});
+  const [busyAccountId, setBusyAccountId] = useState<string | null>(null);
+  const [moveTarget, setMoveTarget] = useState<Record<string, string>>({});
+  const [bindPicker, setBindPicker] = useState<Record<string, string>>({});
 
   const isPanpel = role === 'panpel';
   const isMojisport = role === 'mojisport';
@@ -113,7 +119,7 @@ export default function DashboardPage() {
             (
               data: {
                 success: boolean;
-                codes?: OwnerCodeEntry[];
+                codes?: AccountCodeEntry[];
                 error?: string;
               } | null
             ) => ({ res, data })
@@ -150,8 +156,197 @@ export default function DashboardPage() {
     }
   }, [isProductionHolding, isPanpel, fetchCodes]);
 
-  // Kode hanya bermakna untuk Panpel; peran lain selalu melihat daftar kosong.
-  const visibleCodes = isPanpel ? codes : [];
+  // Panel kode hanya bermakna untuk Panpel; peran lain tidak memuat daftar.
+  const accountForTeam = (team: Team): AccountCodeEntry | undefined =>
+    codes.find(
+      (entry) =>
+        entry.role === 'peserta' &&
+        (entry.teamId === team.id ||
+          ((team.ownerCode ?? '') !== '' && entry.id === team.ownerCode))
+    );
+
+  const unboundParticipantAccounts = codes.filter(
+    (entry) =>
+      entry.role === 'peserta' &&
+      !entry.revoked &&
+      !entry.teamId &&
+      !teams.some((team) => (team.ownerCode ?? '') === entry.id)
+  );
+
+  const refreshCodesAndTeams = async () => {
+    await fetchData();
+    await fetchCodes();
+  };
+
+  const handleCopyCode = async (code: string) => {
+    if (!code) {
+      alert('Kode belum tersedia.');
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(code);
+      alert('Kode berhasil disalin.');
+    } catch {
+      alert(`Salin manual kode ini: ${code}`);
+    }
+  };
+
+  const handleRegenerate = async (entry: AccountCodeEntry) => {
+    if (
+      !confirm(
+        `Buat ulang kode untuk "${entry.label}"? Kode lama langsung tidak berlaku, ikatan tim tetap.`
+      )
+    ) {
+      return;
+    }
+    setBusyAccountId(entry.id);
+    try {
+      const res = await fetch(`/api/auth/accounts/${entry.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'regenerate' }),
+      });
+      const data = (await res.json().catch(() => null)) as {
+        success: boolean;
+        code?: string;
+        error?: string;
+      } | null;
+      if (!res.ok || !data?.success || !data.code) {
+        if (await handleAuthError(res, data, 'Anda tidak memiliki izin untuk aksi ini.')) return;
+        alert(data?.error ?? 'Gagal membuat ulang kode.');
+        return;
+      }
+      setFreshCodes((prev) => ({ ...prev, [entry.id]: data.code as string }));
+      setRevealed((prev) => ({ ...prev, [entry.id]: false }));
+      await refreshCodesAndTeams();
+    } catch (err) {
+      console.error(err);
+      alert('Terjadi kesalahan saat membuat ulang kode.');
+    } finally {
+      setBusyAccountId(null);
+    }
+  };
+
+  const handleToggleRevoke = async (entry: AccountCodeEntry) => {
+    const action = entry.revoked ? 'unrevoke' : 'revoke';
+    if (
+      !confirm(
+        entry.revoked
+          ? `Pulihkan akses "${entry.label}"?`
+          : `Cabut akses "${entry.label}"? Pemilik langsung tidak bisa masuk.`
+      )
+    ) {
+      return;
+    }
+    setBusyAccountId(entry.id);
+    try {
+      const res = await fetch(`/api/auth/accounts/${entry.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action }),
+      });
+      const data = (await res.json().catch(() => null)) as {
+        success: boolean;
+        error?: string;
+      } | null;
+      if (!res.ok || !data?.success) {
+        if (await handleAuthError(res, data, 'Anda tidak memiliki izin untuk aksi ini.')) return;
+        alert(data?.error ?? 'Gagal mengubah status akses.');
+        return;
+      }
+      await refreshCodesAndTeams();
+    } catch (err) {
+      console.error(err);
+      alert('Terjadi kesalahan saat mengubah status akses.');
+    } finally {
+      setBusyAccountId(null);
+    }
+  };
+
+  const handleMoveTeam = async (entry: AccountCodeEntry) => {
+    const target = moveTarget[entry.id] ?? '';
+    if (!target) {
+      alert('Pilih tim tujuan dulu.');
+      return;
+    }
+    const teamId = target === '__none__' ? null : target;
+    if (
+      !confirm(
+        teamId === null
+          ? `Lepas "${entry.label}" dari timnya?`
+          : `Pindah "${entry.label}" ke tim terpilih? Ikatan tim lama dilepas.`
+      )
+    ) {
+      return;
+    }
+    setBusyAccountId(entry.id);
+    try {
+      const res = await fetch(`/api/auth/accounts/${entry.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'reassign', teamId }),
+      });
+      const data = (await res.json().catch(() => null)) as {
+        success: boolean;
+        error?: string;
+      } | null;
+      if (!res.ok || !data?.success) {
+        if (await handleAuthError(res, data, 'Anda tidak memiliki izin untuk aksi ini.')) return;
+        alert(data?.error ?? 'Gagal memindah akun ke tim lain.');
+        return;
+      }
+      setMoveTarget((prev) => {
+        const next = { ...prev };
+        delete next[entry.id];
+        return next;
+      });
+      await refreshCodesAndTeams();
+    } catch (err) {
+      console.error(err);
+      alert('Terjadi kesalahan saat memindah akun.');
+    } finally {
+      setBusyAccountId(null);
+    }
+  };
+
+  const handleBindAccount = async (team: Team) => {
+    const accountId = bindPicker[team.id] ?? '';
+    if (!accountId) {
+      alert('Pilih akun dulu.');
+      return;
+    }
+    if (!confirm(`Ikat akun terpilih ke tim "${team.name}"?`)) {
+      return;
+    }
+    setBusyAccountId(accountId);
+    try {
+      const res = await fetch(`/api/auth/accounts/${accountId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'reassign', teamId: team.id }),
+      });
+      const data = (await res.json().catch(() => null)) as {
+        success: boolean;
+        error?: string;
+      } | null;
+      if (!res.ok || !data?.success) {
+        if (await handleAuthError(res, data, 'Anda tidak memiliki izin untuk aksi ini.')) return;
+        alert(data?.error ?? 'Gagal mengikat akun ke tim.');
+        return;
+      }
+      setBindPicker((prev) => {
+        const next = { ...prev };
+        delete next[team.id];
+        return next;
+      });
+      await refreshCodesAndTeams();
+    } catch (err) {
+      console.error(err);
+      alert('Terjadi kesalahan saat mengikat akun.');
+    } finally {
+      setBusyAccountId(null);
+    }
+  };
 
   if (isProductionHolding) {
     return <ProductionLanding />;
@@ -177,46 +372,6 @@ export default function DashboardPage() {
       console.error(err);
       alert('Terjadi kesalahan saat menghapus tim');
     }
-  };
-
-  const handleSaveOwner = async (team: Team) => {
-    const nextOwner = draftOwner[team.id] ?? team.ownerCode ?? '';
-    if (nextOwner === (team.ownerCode ?? '')) return;
-    setSavingOwnerId(team.id);
-    try {
-      const res = await fetch(`/api/teams/${team.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ownerCode: nextOwner }),
-      });
-      const data = (await res.json().catch(() => null)) as {
-        success: boolean;
-        error?: string;
-      } | null;
-      if (!res.ok || !data?.success) {
-        if (await handleAuthError(res, data, 'Anda tidak memiliki izin untuk mengatur pemilik tim.')) return;
-        alert(data?.error ?? 'Gagal menyimpan pemilik tim.');
-        return;
-      }
-      await fetchData();
-      await fetchCodes();
-    } catch (err) {
-      console.error(err);
-      alert('Terjadi kesalahan saat menyimpan pemilik tim.');
-    } finally {
-      setSavingOwnerId(null);
-    }
-  };
-
-  const ownerLabel = (team: Team): string => {
-    const current = team.ownerCode?.trim() ? team.ownerCode : '';
-    return current === '' ? 'Belum di-assign' : current;
-  };
-
-  const codeOptionLabel = (entry: OwnerCodeEntry, teamId: string): string => {
-    if (entry.usedByTeamId === teamId) return `${entry.code} · tim ini`;
-    if (entry.usedByTeamId && entry.usedByTeamName) return `${entry.code} · dipakai ${entry.usedByTeamName}`;
-    return `${entry.code} · tersedia`;
   };
 
   const filteredTeams = teams.filter(team => {
@@ -458,7 +613,7 @@ export default function DashboardPage() {
                     <th className="py-3 px-3">Asal Provinsi</th>
                     <th className="py-3 px-3">Kelengkapan (20)</th>
                     <th className="py-3 px-3">Status</th>
-                    {isPanpel && <th className="py-3 px-3">Pemilik</th>}
+                    {isPanpel && <th className="py-3 px-3">Kode Pemilik</th>}
                     <th className="py-3 px-3 text-right">Aksi</th>
                   </tr>
                 </thead>
@@ -466,10 +621,7 @@ export default function DashboardPage() {
                   {filteredTeams.map(team => {
                     const filledCount = team.members.filter(m => m.fullName && m.fullName.trim() !== '').length;
                     const isComplete = filledCount === 20;
-                    const currentOwner = team.ownerCode ?? '';
-                    const selectedOwner = draftOwner[team.id] ?? currentOwner;
-                    const ownerDirty = selectedOwner !== currentOwner;
-                    const saving = savingOwnerId === team.id;
+                    const boundAccount = isPanpel ? accountForTeam(team) : undefined;
 
                     return (
                       <tr key={team.id} className="hover:bg-purple-50/40 dark:hover:bg-purple-950/30 transition-colors">
@@ -534,39 +686,174 @@ export default function DashboardPage() {
                         </td>
                         {isPanpel && (
                           <td className="py-3 px-3">
-                            <div className="min-w-[170px] max-w-[220px] space-y-1.5">
-                              <div className="text-[11px] text-slate-500 dark:text-purple-300/70">
-                                Saat ini:{' '}
-                                <span className="font-mono font-bold text-slate-800 dark:text-purple-100">
-                                  {ownerLabel(team)}
-                                </span>
-                              </div>
-                              <div className="flex items-center gap-1.5">
-                                <select
-                                  value={selectedOwner}
-                                  disabled={codesLoading || saving}
-                                  onChange={e =>
-                                    setDraftOwner(prev => ({ ...prev, [team.id]: e.target.value }))
-                                  }
-                                  className="flex-1 min-w-0 py-1.5 px-2 rounded-lg bg-purple-50/50 dark:bg-[#1f0e3f] border border-purple-200/70 dark:border-purple-800/60 text-[11px] font-mono text-slate-800 dark:text-white focus:outline-none focus:border-pink-500"
-                                  aria-label={`Pemilik tim ${team.name}`}
-                                >
-                                  <option value="">Belum di-assign</option>
-                                  {visibleCodes.map(entry => (
-                                    <option key={entry.code} value={entry.code}>
-                                      {codeOptionLabel(entry, team.id)}
-                                    </option>
-                                  ))}
-                                </select>
-                                <button
-                                  type="button"
-                                  onClick={() => void handleSaveOwner(team)}
-                                  disabled={!ownerDirty || saving || codesLoading}
-                                  className="shrink-0 px-2.5 py-1.5 rounded-lg text-[11px] font-bold bg-purple-700 hover:bg-purple-600 disabled:opacity-40 disabled:cursor-not-allowed text-white transition-all"
-                                >
-                                  {saving ? '...' : 'Simpan'}
-                                </button>
-                              </div>
+                            <div className="min-w-[190px] max-w-[250px] space-y-1.5">
+                              {codesLoading ? (
+                                <p className="text-[11px] text-slate-400">Memuat kode…</p>
+                              ) : boundAccount ? (
+                                <>
+                                  <div className="text-[11px] font-bold text-slate-800 dark:text-purple-100">
+                                    {boundAccount.label}
+                                    {boundAccount.revoked && (
+                                      <span className="ml-1.5 px-1.5 py-0.5 rounded-full text-[10px] font-black bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-300">
+                                        Dicabut
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="flex-1 min-w-0 font-mono text-[12px] font-bold tracking-widest text-slate-800 dark:text-purple-100 truncate">
+                                      {revealed[boundAccount.id] ? boundAccount.code || '—' : '•••••••'}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        setRevealed((prev) => ({
+                                          ...prev,
+                                          [boundAccount.id]: !prev[boundAccount.id],
+                                        }))
+                                      }
+                                      className="shrink-0 px-2 py-1 rounded-lg text-[11px] font-bold bg-purple-100 hover:bg-purple-200 dark:bg-purple-900/50 dark:hover:bg-purple-800/60 text-purple-800 dark:text-purple-100 transition-all"
+                                    >
+                                      {revealed[boundAccount.id] ? 'Sembunyi' : 'Lihat'}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => void handleCopyCode(boundAccount.code)}
+                                      className="shrink-0 px-2 py-1 rounded-lg text-[11px] font-bold bg-purple-100 hover:bg-purple-200 dark:bg-purple-900/50 dark:hover:bg-purple-800/60 text-purple-800 dark:text-purple-100 transition-all"
+                                    >
+                                      Salin
+                                    </button>
+                                  </div>
+                                  {freshCodes[boundAccount.id] && (
+                                    <div className="rounded-lg border border-emerald-300 dark:border-emerald-500/40 bg-emerald-50 dark:bg-emerald-500/10 p-1.5 space-y-1">
+                                      <p className="text-[10px] text-emerald-700 dark:text-emerald-300">
+                                        Kode baru (salin sekarang):
+                                      </p>
+                                      <div className="flex items-center gap-1.5">
+                                        <span className="flex-1 font-mono text-[12px] font-black tracking-widest text-emerald-800 dark:text-emerald-200">
+                                          {freshCodes[boundAccount.id]}
+                                        </span>
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            void handleCopyCode(freshCodes[boundAccount.id])
+                                          }
+                                          className="shrink-0 px-2 py-0.5 rounded-lg text-[10px] font-bold bg-emerald-600 hover:bg-emerald-500 text-white"
+                                        >
+                                          Salin
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            setFreshCodes((prev) => {
+                                              const next = { ...prev };
+                                              delete next[boundAccount.id];
+                                              return next;
+                                            })
+                                          }
+                                          className="shrink-0 px-2 py-0.5 rounded-lg text-[10px] font-bold text-emerald-700 dark:text-emerald-300 hover:underline"
+                                        >
+                                          Tutup
+                                        </button>
+                                      </div>
+                                    </div>
+                                  )}
+                                  <div className="flex items-center gap-1.5">
+                                    <button
+                                      type="button"
+                                      onClick={() => void handleRegenerate(boundAccount)}
+                                      disabled={busyAccountId === boundAccount.id}
+                                      className="flex-1 px-2 py-1 rounded-lg text-[11px] font-bold bg-purple-700 hover:bg-purple-600 disabled:opacity-40 text-white transition-all"
+                                    >
+                                      {busyAccountId === boundAccount.id ? '…' : 'Generate ulang'}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => void handleToggleRevoke(boundAccount)}
+                                      disabled={busyAccountId === boundAccount.id}
+                                      className={`flex-1 px-2 py-1 rounded-lg text-[11px] font-bold disabled:opacity-40 transition-all ${
+                                        boundAccount.revoked
+                                          ? 'bg-emerald-600 hover:bg-emerald-500 text-white'
+                                          : 'bg-rose-100 hover:bg-rose-200 dark:bg-rose-500/15 dark:hover:bg-rose-500/25 text-rose-700 dark:text-rose-300'
+                                      }`}
+                                    >
+                                      {boundAccount.revoked ? 'Pulihkan' : 'Cabut'}
+                                    </button>
+                                  </div>
+                                  <div className="flex items-center gap-1.5">
+                                    <select
+                                      value={moveTarget[boundAccount.id] ?? ''}
+                                      onChange={(e) =>
+                                        setMoveTarget((prev) => ({
+                                          ...prev,
+                                          [boundAccount.id]: e.target.value,
+                                        }))
+                                      }
+                                      className="flex-1 min-w-0 py-1 px-1.5 rounded-lg bg-purple-50/50 dark:bg-[#1f0e3f] border border-purple-200/70 dark:border-purple-800/60 text-[11px] text-slate-800 dark:text-white focus:outline-none focus:border-pink-500"
+                                      aria-label={`Pindah tim untuk ${boundAccount.label}`}
+                                    >
+                                      <option value="">Pindah ke…</option>
+                                      <option value="__none__">Lepas dari tim</option>
+                                      {teams
+                                        .filter((t) => t.id !== team.id)
+                                        .map((t) => (
+                                          <option key={t.id} value={t.id}>
+                                            {t.name} · {t.category}
+                                          </option>
+                                        ))}
+                                    </select>
+                                    <button
+                                      type="button"
+                                      onClick={() => void handleMoveTeam(boundAccount)}
+                                      disabled={
+                                        !moveTarget[boundAccount.id] ||
+                                        busyAccountId === boundAccount.id
+                                      }
+                                      className="shrink-0 px-2 py-1 rounded-lg text-[11px] font-bold bg-slate-700 hover:bg-slate-600 disabled:opacity-40 text-white transition-all"
+                                    >
+                                      Pindah
+                                    </button>
+                                  </div>
+                                </>
+                              ) : (
+                                <>
+                                  <p className="text-[11px] text-slate-500 dark:text-purple-300/70">
+                                    Belum terikat akun.
+                                  </p>
+                                  {unboundParticipantAccounts.length > 0 && (
+                                    <div className="flex items-center gap-1.5">
+                                      <select
+                                        value={bindPicker[team.id] ?? ''}
+                                        onChange={(e) =>
+                                          setBindPicker((prev) => ({
+                                            ...prev,
+                                            [team.id]: e.target.value,
+                                          }))
+                                        }
+                                        className="flex-1 min-w-0 py-1 px-1.5 rounded-lg bg-purple-50/50 dark:bg-[#1f0e3f] border border-purple-200/70 dark:border-purple-800/60 text-[11px] text-slate-800 dark:text-white focus:outline-none focus:border-pink-500"
+                                        aria-label={`Ikat akun ke ${team.name}`}
+                                      >
+                                        <option value="">Pilih akun…</option>
+                                        {unboundParticipantAccounts.map((entry) => (
+                                          <option key={entry.id} value={entry.id}>
+                                            {entry.label}
+                                          </option>
+                                        ))}
+                                      </select>
+                                      <button
+                                        type="button"
+                                        onClick={() => void handleBindAccount(team)}
+                                        disabled={
+                                          !bindPicker[team.id] ||
+                                          busyAccountId === bindPicker[team.id]
+                                        }
+                                        className="shrink-0 px-2 py-1 rounded-lg text-[11px] font-bold bg-purple-700 hover:bg-purple-600 disabled:opacity-40 text-white transition-all"
+                                      >
+                                        Ikat
+                                      </button>
+                                    </div>
+                                  )}
+                                </>
+                              )}
                             </div>
                           </td>
                         )}
@@ -608,6 +895,7 @@ export default function DashboardPage() {
             <div className="md:hidden space-y-3 mt-3">
               {filteredTeams.map(team => {
                 const filledCount = team.members.filter(m => m.fullName && m.fullName.trim() !== '').length;
+                const boundAccount = isPanpel ? accountForTeam(team) : undefined;
 
                 return (
                   <div
@@ -645,11 +933,176 @@ export default function DashboardPage() {
                     </div>
 
                     {isPanpel ? (
-                      <div className="text-[11px] text-slate-600 dark:text-purple-300/80">
-                        Pemilik:{' '}
-                        <span className="font-mono font-bold text-slate-800 dark:text-purple-100">
-                          {ownerLabel(team)}
-                        </span>
+                      <div className="rounded-xl border border-purple-100 dark:border-purple-900/60 bg-white dark:bg-[#15072c] p-3 space-y-2">
+                        {codesLoading ? (
+                          <p className="text-[11px] text-slate-400">Memuat kode…</p>
+                        ) : boundAccount ? (
+                          <>
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-[11px] font-bold text-slate-800 dark:text-purple-100">
+                                {boundAccount.label}
+                              </span>
+                              {boundAccount.revoked && (
+                                <span className="px-1.5 py-0.5 rounded-full text-[10px] font-black bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-300">
+                                  Dicabut
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                              <span className="flex-1 font-mono text-[13px] font-bold tracking-widest text-slate-800 dark:text-purple-100">
+                                {revealed[boundAccount.id] ? boundAccount.code || '—' : '•••••••'}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setRevealed((prev) => ({
+                                    ...prev,
+                                    [boundAccount.id]: !prev[boundAccount.id],
+                                  }))
+                                }
+                                className="shrink-0 px-2.5 py-1.5 rounded-lg text-[11px] font-bold bg-purple-100 dark:bg-purple-900/50 text-purple-800 dark:text-purple-100"
+                              >
+                                {revealed[boundAccount.id] ? 'Sembunyi' : 'Lihat'}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => void handleCopyCode(boundAccount.code)}
+                                className="shrink-0 px-2.5 py-1.5 rounded-lg text-[11px] font-bold bg-purple-100 dark:bg-purple-900/50 text-purple-800 dark:text-purple-100"
+                              >
+                                Salin
+                              </button>
+                            </div>
+                            {freshCodes[boundAccount.id] && (
+                              <div className="rounded-lg border border-emerald-300 dark:border-emerald-500/40 bg-emerald-50 dark:bg-emerald-500/10 p-2 space-y-1">
+                                <p className="text-[10px] text-emerald-700 dark:text-emerald-300">
+                                  Kode baru (salin sekarang):
+                                </p>
+                                <div className="flex items-center gap-1.5">
+                                  <span className="flex-1 font-mono text-[13px] font-black tracking-widest text-emerald-800 dark:text-emerald-200">
+                                    {freshCodes[boundAccount.id]}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      void handleCopyCode(freshCodes[boundAccount.id])
+                                    }
+                                    className="shrink-0 px-2 py-1 rounded-lg text-[10px] font-bold bg-emerald-600 text-white"
+                                  >
+                                    Salin
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setFreshCodes((prev) => {
+                                        const next = { ...prev };
+                                        delete next[boundAccount.id];
+                                        return next;
+                                      })
+                                    }
+                                    className="shrink-0 px-2 py-1 rounded-lg text-[10px] font-bold text-emerald-700 dark:text-emerald-300"
+                                  >
+                                    Tutup
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => void handleRegenerate(boundAccount)}
+                                disabled={busyAccountId === boundAccount.id}
+                                className="flex-1 px-2 py-2 rounded-lg text-[11px] font-bold bg-purple-700 disabled:opacity-40 text-white"
+                              >
+                                {busyAccountId === boundAccount.id ? '…' : 'Generate ulang'}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => void handleToggleRevoke(boundAccount)}
+                                disabled={busyAccountId === boundAccount.id}
+                                className={`flex-1 px-2 py-2 rounded-lg text-[11px] font-bold disabled:opacity-40 ${
+                                  boundAccount.revoked
+                                    ? 'bg-emerald-600 text-white'
+                                    : 'bg-rose-100 dark:bg-rose-500/15 text-rose-700 dark:text-rose-300'
+                                }`}
+                              >
+                                {boundAccount.revoked ? 'Pulihkan' : 'Cabut'}
+                              </button>
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                              <select
+                                value={moveTarget[boundAccount.id] ?? ''}
+                                onChange={(e) =>
+                                  setMoveTarget((prev) => ({
+                                    ...prev,
+                                    [boundAccount.id]: e.target.value,
+                                  }))
+                                }
+                                className="flex-1 min-w-0 py-2 px-2 rounded-lg bg-white dark:bg-[#15072c] border border-purple-200 dark:border-purple-800 text-[11px] text-slate-800 dark:text-white focus:outline-none focus:border-pink-500"
+                                aria-label={`Pindah tim untuk ${boundAccount.label}`}
+                              >
+                                <option value="">Pindah ke…</option>
+                                <option value="__none__">Lepas dari tim</option>
+                                {teams
+                                  .filter((t) => t.id !== team.id)
+                                  .map((t) => (
+                                    <option key={t.id} value={t.id}>
+                                      {t.name} · {t.category}
+                                    </option>
+                                  ))}
+                              </select>
+                              <button
+                                type="button"
+                                onClick={() => void handleMoveTeam(boundAccount)}
+                                disabled={
+                                  !moveTarget[boundAccount.id] ||
+                                  busyAccountId === boundAccount.id
+                                }
+                                className="shrink-0 px-3 py-2 rounded-lg text-[11px] font-bold bg-slate-700 disabled:opacity-40 text-white"
+                              >
+                                Pindah
+                              </button>
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <p className="text-[11px] text-slate-500 dark:text-purple-300/70">
+                              Belum terikat akun.
+                            </p>
+                            {unboundParticipantAccounts.length > 0 && (
+                              <div className="flex items-center gap-1.5">
+                                <select
+                                  value={bindPicker[team.id] ?? ''}
+                                  onChange={(e) =>
+                                    setBindPicker((prev) => ({
+                                      ...prev,
+                                      [team.id]: e.target.value,
+                                    }))
+                                  }
+                                  className="flex-1 min-w-0 py-2 px-2 rounded-lg bg-white dark:bg-[#15072c] border border-purple-200 dark:border-purple-800 text-[11px] text-slate-800 dark:text-white focus:outline-none focus:border-pink-500"
+                                  aria-label={`Ikat akun ke ${team.name}`}
+                                >
+                                  <option value="">Pilih akun…</option>
+                                  {unboundParticipantAccounts.map((entry) => (
+                                    <option key={entry.id} value={entry.id}>
+                                      {entry.label}
+                                    </option>
+                                  ))}
+                                </select>
+                                <button
+                                  type="button"
+                                  onClick={() => void handleBindAccount(team)}
+                                  disabled={
+                                    !bindPicker[team.id] ||
+                                    busyAccountId === bindPicker[team.id]
+                                  }
+                                  className="shrink-0 px-3 py-2 rounded-lg text-[11px] font-bold bg-purple-700 disabled:opacity-40 text-white"
+                                >
+                                  Ikat
+                                </button>
+                              </div>
+                            )}
+                          </>
+                        )}
                       </div>
                     ) : (
                       <div className="text-[11px] text-slate-500 dark:text-purple-300/60">
@@ -657,40 +1110,6 @@ export default function DashboardPage() {
                         <span className="font-bold text-slate-700 dark:text-purple-200">
                           {team.status}
                         </span>
-                      </div>
-                    )}
-
-                    {isPanpel && (
-                      <div className="flex items-center gap-1.5">
-                        <select
-                          value={draftOwner[team.id] ?? team.ownerCode ?? ''}
-                          disabled={codesLoading || savingOwnerId === team.id}
-                          onChange={e =>
-                            setDraftOwner(prev => ({ ...prev, [team.id]: e.target.value }))
-                          }
-                          className="flex-1 min-w-0 py-2 px-2 rounded-lg bg-white dark:bg-[#15072c] border border-purple-200 dark:border-purple-800 text-[11px] font-mono text-slate-800 dark:text-white focus:outline-none focus:border-pink-500"
-                          aria-label={`Pemilik tim ${team.name}`}
-                        >
-                          <option value="">Belum di-assign</option>
-                          {visibleCodes.map(entry => (
-                            <option key={entry.code} value={entry.code}>
-                              {codeOptionLabel(entry, team.id)}
-                            </option>
-                          ))}
-                        </select>
-                        <button
-                          type="button"
-                          onClick={() => void handleSaveOwner(team)}
-                          disabled={
-                            (draftOwner[team.id] ?? team.ownerCode ?? '') ===
-                              (team.ownerCode ?? '') ||
-                            savingOwnerId === team.id ||
-                            codesLoading
-                          }
-                          className="shrink-0 px-3 py-2 rounded-lg text-[11px] font-bold bg-purple-700 hover:bg-purple-600 disabled:opacity-40 disabled:cursor-not-allowed text-white transition-all"
-                        >
-                          {savingOwnerId === team.id ? '...' : 'Simpan'}
-                        </button>
                       </div>
                     )}
 

@@ -30,7 +30,16 @@ export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => ({}));
   const code = typeof body?.code === 'string' ? body.code : '';
 
-  const actor = resolveAccessCode(code);
+  let actor;
+  try {
+    actor = await resolveAccessCode(code);
+  } catch (err) {
+    console.error('Login error:', err);
+    return NextResponse.json(
+      { success: false, error: 'Layanan autentikasi sedang tidak tersedia. Coba lagi nanti.' },
+      { status: 500 }
+    );
+  }
   if (!actor) {
     return NextResponse.json(
       { success: false, error: 'Kode Akses tidak terdaftar.' },

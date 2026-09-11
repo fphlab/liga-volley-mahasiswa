@@ -1,7 +1,7 @@
-import { Pool, PoolClient, types } from 'pg';
+import { Pool, PoolClient, QueryResultRow, types } from 'pg';
 import { Team, Member, Region, Category } from '../types';
 import { assembleTeams, mapMemberRow, MemberRow, TeamRow } from '../rowMappers';
-import { BackendError, DataBackend } from '../backend';
+import { AccountInsert, AccountRow, BackendError, DataBackend } from '../backend';
 
 /**
  * Backend PostgreSQL langsung (node-postgres) — untuk database lokal/dev
@@ -35,7 +35,7 @@ function getPool(): Pool {
   return cachedPool;
 }
 
-function query<T extends Record<string, unknown> = Record<string, unknown>>(
+function query<T extends QueryResultRow = QueryResultRow>(
   text: string,
   params?: unknown[]
 ) {
@@ -298,5 +298,112 @@ export const pgBackend: DataBackend = {
       }
       throw err;
     }
+  },
+
+  async findAccountByHash(hash: string): Promise<AccountRow | null> {
+    let result;
+    try {
+      result = await query<AccountRow>(
+        `SELECT id, code_hash, code_enc, role, label, team_id, revoked
+         FROM access_accounts WHERE code_hash = $1`,
+        [hash]
+      );
+    } catch (err) {
+      throw new Error(`Gagal mencari akun akses: ${(err as Error).message}`);
+    }
+    return result.rows[0] ?? null;
+  },
+
+  async findAccountById(id: string): Promise<AccountRow | null> {
+    let result;
+    try {
+      result = await query<AccountRow>(
+        `SELECT id, code_hash, code_enc, role, label, team_id, revoked
+         FROM access_accounts WHERE id = $1`,
+        [id]
+      );
+    } catch (err) {
+      throw new Error(`Gagal membaca akun akses: ${(err as Error).message}`);
+    }
+    return result.rows[0] ?? null;
+  },
+
+  async listAccounts(): Promise<AccountRow[]> {
+    let result;
+    try {
+      result = await query<AccountRow>(
+        `SELECT id, code_hash, code_enc, role, label, team_id, revoked
+         FROM access_accounts ORDER BY created_at ASC, id ASC`
+      );
+    } catch (err) {
+      throw new Error(`Gagal mengambil daftar akun akses: ${(err as Error).message}`);
+    }
+    return result.rows;
+  },
+
+  async createAccounts(rows: AccountInsert[]): Promise<void> {
+    if (rows.length === 0) return;
+    const values: unknown[] = [];
+    const tuples = rows.map((row, i) => {
+      const base = i * 7;
+      values.push(row.id, row.code_hash, row.code_enc, row.role, row.label, row.team_id, row.revoked);
+      return `($${base + 1},$${base + 2},$${base + 3},$${base + 4},$${base + 5},$${base + 6},$${base + 7})`;
+    });
+    try {
+      await query(
+        `INSERT INTO access_accounts (id, code_hash, code_enc, role, label, team_id, revoked)
+         VALUES ${tuples.join(', ')}`,
+        values
+      );
+    } catch (err) {
+      throw new Error(`Gagal menyimpan akun akses: ${(err as Error).message}`);
+    }
+  },
+
+  async clearAllAccounts(): Promise<void> {
+    try {
+      await query(`DELETE FROM access_accounts WHERE id <> '__none__'`);
+    } catch (err) {
+      throw new Error(`Gagal mengosongkan tabel akun akses: ${(err as Error).message}`);
+    }
+  },
+
+  async setAccountTeam(accountId: string, teamId: string | null): Promise<boolean> {
+    let result;
+    try {
+      result = await query(
+        `UPDATE access_accounts SET team_id = $1 WHERE id = $2 RETURNING id`,
+        [teamId, accountId]
+      );
+    } catch (err) {
+      throw new Error(`Gagal mengikat akun ke tim: ${(err as Error).message}`);
+    }
+    return (result.rowCount ?? 0) > 0;
+  },
+
+  async setAccountRevoked(id: string, revoked: boolean): Promise<boolean> {
+    let result;
+    try {
+      result = await query(
+        `UPDATE access_accounts SET revoked = $1 WHERE id = $2 RETURNING id`,
+        [revoked, id]
+      );
+    } catch (err) {
+      throw new Error(`Gagal mengubah status revoke akun: ${(err as Error).message}`);
+    }
+    return (result.rowCount ?? 0) > 0;
+  },
+
+  async rotateAccountHash(id: string, newHash: string, newEnc: string): Promise<boolean> {
+    let result;
+    try {
+      result = await query(
+        `UPDATE access_accounts SET code_hash = $1, code_enc = $2 WHERE id = $3 RETURNING id`,
+        [newHash, newEnc, id]
+      );
+    } catch (err) {
+      throw new Error(`Gagal memperbarui kode akun: ${(err as Error).message}`);
+    }
+    return (result.rowCount ?? 0) > 0;
   },
 };
