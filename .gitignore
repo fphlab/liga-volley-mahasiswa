@@ -44,3 +44,6 @@ next-env.d.ts
 # user uploads
 /public/uploads/
 
+# private operator files (lembar kode, backup data — rahasia, jangan commit)
+/private/
+
