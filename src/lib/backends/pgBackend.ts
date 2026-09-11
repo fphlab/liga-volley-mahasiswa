@@ -111,7 +111,13 @@ export const pgBackend: DataBackend = {
     return assembleTeams(teamResult.rows, memberRows)[0] ?? null;
   },
 
-  async fetchRegionCategoryPairs(): Promise<Array<{ region: string; category: string }>> {
+  async fetchRegionCategoryPairs(status?: 'Terverifikasi' | 'ALL'): Promise<Array<{ region: string; category: string }>> {
+    if (status === 'Terverifikasi') {
+      const result = await query<{ region: string; category: string }>(
+        `SELECT region, category FROM teams WHERE status = 'Terverifikasi'`
+      );
+      return result.rows;
+    }
     const result = await query<{ region: string; category: string }>(
       `SELECT region, category FROM teams`
     );

@@ -87,7 +87,7 @@ export default function TeamDetailPage({ params }: { params: Promise<{ id: strin
       return;
     }
 
-    if (!confirm('[PANITIA] Verifikasi data tim ini? Status akan berubah menjadi Terverifikasi.')) {
+    if (!confirm('[PANITIA] Verifikasi data tim ini? Status akan menjadi Terverifikasi dan resmi mengunci 1 slot kuota regional.')) {
       return;
     }
     try {
@@ -172,7 +172,7 @@ export default function TeamDetailPage({ params }: { params: Promise<{ id: strin
               ) : (
                 <BadgeCheck className="w-3.5 h-3.5" />
               )}
-              Verifikasi Tim
+              Verifikasi Tim (Kunci Slot)
             </button>
           )}
           {team.status === 'Terverifikasi' && (

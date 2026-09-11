@@ -55,7 +55,7 @@ export default function QuotaCard({ region, quotas }: QuotaCardProps) {
           <div className="text-xl font-black font-mono text-pink-600 dark:text-pink-400">
             {totalRegistered} <span className="text-xs font-normal text-slate-400 dark:text-purple-400/60">/{totalMax}</span>
           </div>
-          <span className="text-[10px] uppercase font-bold text-slate-400 dark:text-purple-400/60">Alokasi Tim</span>
+          <span className="text-[10px] uppercase font-bold text-slate-400 dark:text-purple-400/60">Terverifikasi</span>
         </div>
       </div>
 
@@ -69,7 +69,7 @@ export default function QuotaCard({ region, quotas }: QuotaCardProps) {
               Tim Putra
             </span>
             <span className={putraQuota.availableSlots === 0 ? 'text-pink-600 dark:text-pink-400 font-black' : 'text-slate-700 dark:text-purple-200 font-mono font-semibold'}>
-              {putraQuota.registeredTeams} / {MAX_TEAMS_PER_REGION_CATEGORY} Tim
+              {putraQuota.registeredTeams} / {MAX_TEAMS_PER_REGION_CATEGORY} Terverifikasi
               {putraQuota.availableSlots === 0 && ' (PENUH)'}
             </span>
           </div>
@@ -81,7 +81,7 @@ export default function QuotaCard({ region, quotas }: QuotaCardProps) {
               return (
                 <div
                   key={idx}
-                  title={`Slot Tim Putra ${idx + 1}: ${isFilled ? 'Terisi' : 'Tersedia'}`}
+                  title={`Slot Tim Putra ${idx + 1}: ${isFilled ? 'Terverifikasi' : 'Tersedia'}`}
                   className={`h-2.5 rounded-sm transition-all ${
                     isFilled
                       ? 'bg-gradient-to-r from-blue-600 to-indigo-600 dark:from-sky-500 dark:to-blue-600 shadow-xs'
@@ -101,7 +101,7 @@ export default function QuotaCard({ region, quotas }: QuotaCardProps) {
               Tim Putri
             </span>
             <span className={putriQuota.availableSlots === 0 ? 'text-pink-600 dark:text-pink-400 font-black' : 'text-slate-700 dark:text-purple-200 font-mono font-semibold'}>
-              {putriQuota.registeredTeams} / {MAX_TEAMS_PER_REGION_CATEGORY} Tim
+              {putriQuota.registeredTeams} / {MAX_TEAMS_PER_REGION_CATEGORY} Terverifikasi
               {putriQuota.availableSlots === 0 && ' (PENUH)'}
             </span>
           </div>
@@ -113,7 +113,7 @@ export default function QuotaCard({ region, quotas }: QuotaCardProps) {
               return (
                 <div
                   key={idx}
-                  title={`Slot Tim Putri ${idx + 1}: ${isFilled ? 'Terisi' : 'Tersedia'}`}
+                  title={`Slot Tim Putri ${idx + 1}: ${isFilled ? 'Terverifikasi' : 'Tersedia'}`}
                   className={`h-2.5 rounded-sm transition-all ${
                     isFilled
                       ? 'bg-gradient-to-r from-pink-600 to-fuchsia-600 dark:from-pink-500 dark:to-fuchsia-500 shadow-neon-pink'

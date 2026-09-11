@@ -140,7 +140,7 @@ export default function RootRegisterPage() {
     }
 
     if (isFull) {
-      setErrorMsg(`Kuota tim ${category} untuk ${region} sudah penuh (${MAX_TEAMS_PER_REGION_CATEGORY} Tim).`);
+      setErrorMsg(`Pendaftaran ditutup: Kuota 6 tim resmi untuk ${region} (${category}) sudah terpenuhi oleh tim yang terverifikasi.`);
       return;
     }
 
@@ -226,12 +226,12 @@ export default function RootRegisterPage() {
               <div className="text-xs text-slate-600 dark:text-purple-300/80 mt-0.5">
                 {isFull ? (
                   <span className="text-rose-600 dark:text-rose-400 font-bold">
-                    Kuota 6 Tim sudah penuh untuk regional & kategori ini.
+                    Kuota 6 Tim resmi sudah terpenuhi oleh tim terverifikasi.
                   </span>
                 ) : (
                   <span>
                     Tersedia <strong className="text-pink-600 dark:text-pink-400 font-mono font-bold">{availableSlots}</strong> dari{' '}
-                    {MAX_TEAMS_PER_REGION_CATEGORY} slot tim.
+                    {MAX_TEAMS_PER_REGION_CATEGORY} slot resmi (slot terkunci saat tim diverifikasi panitia).
                   </span>
                 )}
               </div>
@@ -249,7 +249,7 @@ export default function RootRegisterPage() {
                       ? 'bg-gradient-to-r from-pink-600 to-fuchsia-600 shadow-neon-pink'
                       : 'bg-purple-100 dark:bg-purple-950/60 border border-purple-200 dark:border-purple-800/60'
                   }`}
-                  title={`Slot ${idx + 1}`}
+                  title={`Slot ${idx + 1}: ${isFilled ? 'Terverifikasi' : 'Tersedia'}`}
                 />
               );
             })}

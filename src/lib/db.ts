@@ -90,7 +90,8 @@ export async function getTeamById(id: string): Promise<Team | null> {
 
 export async function getQuotaStats(): Promise<RegionalQuota[]> {
   const backend = await getDataBackend();
-  const pairs = await backend.fetchRegionCategoryPairs();
+  // Hanya tim yang sudah diverifikasi panitia yang memakan slot kuota resmi (6 tim)
+  const pairs = await backend.fetchRegionCategoryPairs('Terverifikasi');
 
   const regions: Region[] = ['Barat', 'Tengah', 'Timur'];
   const categories: Category[] = ['Putra', 'Putri'];
@@ -227,15 +228,15 @@ export function createTeam(data: {
 
       const backend = await getDataBackend();
 
-      // Pre-check kuota untuk pesan error yang ramah (trigger DB sebagai backstop)
-      const pairs = await backend.fetchRegionCategoryPairs();
-      const sameSlot = pairs.filter(
+      // Pre-check kuota terverifikasi: bila 6 tim resmi sudah terverifikasi, pendaftaran baru ditutup
+      const verifiedPairs = await backend.fetchRegionCategoryPairs('Terverifikasi');
+      const verifiedCount = verifiedPairs.filter(
         p => p.region === data.region && p.category === data.category
       ).length;
-      if (sameSlot >= MAX_TEAMS_PER_REGION_CATEGORY) {
+      if (verifiedCount >= MAX_TEAMS_PER_REGION_CATEGORY) {
         return {
           success: false,
-          error: `Kuota untuk Regional ${data.region} (${data.category}) sudah penuh (${MAX_TEAMS_PER_REGION_CATEGORY} Tim).`,
+          error: `Pendaftaran ditutup: Kuota 6 tim resmi untuk Regional ${data.region} (${data.category}) sudah terpenuhi oleh tim yang terverifikasi.`,
         };
       }
 
@@ -314,6 +315,26 @@ export function updateTeam(id: string, updates: Partial<Team>): Promise<{ succes
   return withDatabaseLock(async () => {
     try {
       const backend = await getDataBackend();
+
+      // Jika panitia memverifikasi tim, pastikan slot kuota 6 tim terverifikasi belum penuh
+      if (updates.status === 'Terverifikasi') {
+        const currentTeam = await backend.fetchTeamWithMembers(id);
+        if (!currentTeam) {
+          return { success: false, error: 'Team tidak ditemukan' };
+        }
+        if (currentTeam.status !== 'Terverifikasi') {
+          const verifiedPairs = await backend.fetchRegionCategoryPairs('Terverifikasi');
+          const verifiedCount = verifiedPairs.filter(
+            p => p.region === currentTeam.region && p.category === currentTeam.category
+          ).length;
+          if (verifiedCount >= MAX_TEAMS_PER_REGION_CATEGORY) {
+            return {
+              success: false,
+              error: `Kuota 6 tim terverifikasi untuk Regional ${currentTeam.region} (${currentTeam.category}) sudah penuh (${MAX_TEAMS_PER_REGION_CATEGORY} Tim). Batalkan verifikasi tim lain terlebih dahulu jika ingin memverifikasi tim ini.`,
+            };
+          }
+        }
+      }
 
       // Whitelist kolom — abaikan field lain (members, timestamp, dsb.)
       const patch: Record<string, unknown> = {};

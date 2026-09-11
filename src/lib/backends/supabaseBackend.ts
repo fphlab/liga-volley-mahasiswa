@@ -77,9 +77,13 @@ export const supabaseBackend: DataBackend = {
     return data ? mapTeamRow(data as unknown as TeamRowWithMembers) : null;
   },
 
-  async fetchRegionCategoryPairs(): Promise<Array<{ region: string; category: string }>> {
+  async fetchRegionCategoryPairs(status?: 'Terverifikasi' | 'ALL'): Promise<Array<{ region: string; category: string }>> {
     const supabase = getSupabaseAdmin();
-    const { data, error } = await supabase.from('teams').select('region, category');
+    let query = supabase.from('teams').select('region, category');
+    if (status === 'Terverifikasi') {
+      query = query.eq('status', 'Terverifikasi');
+    }
+    const { data, error } = await query;
     if (error) {
       throw new Error(`Gagal mengambil statistik kuota: ${error.message}`);
     }

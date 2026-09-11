@@ -68,19 +68,34 @@ create unique index if not exists members_unique_jersey_per_team
 create or replace function public.enforce_team_quota()
 returns trigger as $$
 declare
-  team_count int;
+  verified_count int;
 begin
   -- Kunci transaksi tingkat PostgreSQL (Advisory Lock) berbasis kombinasi region & category
-  -- untuk mencegah race condition / TOCTOU saat pendaftaran serentak di milidetik yang sama
+  -- untuk mencegah race condition / TOCTOU saat verifikasi atau pendaftaran serentak di milidetik yang sama
   perform pg_advisory_xact_lock(hashtext(new.region || ':' || new.category));
 
-  select count(*) into team_count
-  from public.teams
-  where region = new.region and category = new.category;
+  -- Saat verifikasi tim (status = 'Terverifikasi'): pastikan tidak melebihi 6 tim terverifikasi
+  if new.status = 'Terverifikasi' then
+    select count(*) into verified_count
+    from public.teams
+    where region = new.region and category = new.category and status = 'Terverifikasi' and id != new.id;
 
-  if team_count >= 6 then
-    raise exception 'Kuota untuk Regional % (%) sudah penuh (6 Tim).', new.region, new.category
-      using errcode = 'check_violation';
+    if verified_count >= 6 then
+      raise exception 'Kuota 6 tim terverifikasi untuk Regional % (%) sudah penuh.', new.region, new.category
+        using errcode = 'check_violation';
+    end if;
+  end if;
+
+  -- Saat pendaftaran baru: ditutup jika sudah ada 6 tim terverifikasi di regional & kategori tersebut
+  if TG_OP = 'INSERT' then
+    select count(*) into verified_count
+    from public.teams
+    where region = new.region and category = new.category and status = 'Terverifikasi';
+
+    if verified_count >= 6 then
+      raise exception 'Pendaftaran ditutup: Kuota 6 tim resmi untuk Regional % (%) sudah terpenuhi oleh tim yang terverifikasi.', new.region, new.category
+        using errcode = 'check_violation';
+    end if;
   end if;
 
   return new;
@@ -89,7 +104,7 @@ $$ language plpgsql;
 
 drop trigger if exists teams_quota_check on public.teams;
 create trigger teams_quota_check
-  before insert on public.teams
+  before insert or update of status on public.teams
   for each row execute function public.enforce_team_quota();
 
 -- ------------------------------------------------------------

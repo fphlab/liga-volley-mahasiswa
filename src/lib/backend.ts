@@ -35,7 +35,7 @@ export interface DataBackend {
 
   fetchTeamsWithMembers(filter?: { region?: Region; category?: Category }): Promise<Team[]>;
   fetchTeamWithMembers(id: string): Promise<Team | null>;
-  fetchRegionCategoryPairs(): Promise<Array<{ region: string; category: string }>>;
+  fetchRegionCategoryPairs(status?: 'Terverifikasi' | 'ALL'): Promise<Array<{ region: string; category: string }>>;
   findUsedTeamNumbers(prefix: string): Promise<Set<number>>;
 
   /** Insert tim + seluruh personelnya secara atomik; throws BackendError */
