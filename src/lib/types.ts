@@ -47,6 +47,7 @@ export interface Team {
   category: Category;
   contactPerson?: string;
   contactPhone?: string;
+  ownerCode: string; // kode peserta (userN); '' = belum di-assign
   members: Member[];
   status: 'Draft' | 'Lengkap' | 'Terverifikasi';
   createdAt: string;

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import Navbar from '@/components/Navbar';
@@ -12,6 +12,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const { isProductionHolding } = useAppMode();
+  const [guestCheck, setGuestCheck] = useState<'pending' | 'guest' | 'authed'>('pending');
 
   // Redirect any other route back to / if in production holding mode
   useEffect(() => {
@@ -19,6 +20,33 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       router.replace('/');
     }
   }, [isProductionHolding, pathname, router]);
+
+  // Lapis kedua setelah proxy: cek sesi via API. Seluruh setState terjadi di
+  // callback async (bukan sinkron di badan effect) agar tidak memicu render
+  // beruntun. Gagal jaringan = jangan redirect; proxy tetap penegak utama.
+  useEffect(() => {
+    if (isProductionHolding || pathname === '/production' || pathname === '/login') {
+      return;
+    }
+    let cancelled = false;
+    fetch('/api/auth/session', { cache: 'no-store' })
+      .then((res) => (res.ok ? res.json() : { authenticated: false }))
+      .then((data: { authenticated?: boolean }) => {
+        if (!cancelled) setGuestCheck(data.authenticated === true ? 'authed' : 'guest');
+      })
+      .catch(() => {
+        if (!cancelled) setGuestCheck('authed');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isProductionHolding, pathname]);
+
+  useEffect(() => {
+    if (!isProductionHolding && pathname !== '/login' && pathname !== '/production' && guestCheck === 'guest') {
+      router.replace('/login');
+    }
+  }, [isProductionHolding, pathname, guestCheck, router]);
 
   // If in production holding mode or viewing /production, strictly show only the holding landing display
   if (isProductionHolding || pathname === '/production') {

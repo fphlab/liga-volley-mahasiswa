@@ -11,12 +11,12 @@ import {
   Save,
   Shirt,
   Lock,
-  Unlock,
   RotateCcw
 } from 'lucide-react';
 import { Team, Member, TeamRole, PlayingPosition, PLAYING_POSITIONS } from '@/lib/types';
 import PhotoUpload from '@/components/PhotoUpload';
 import LvmLogo from '@/components/LvmLogo';
+import { useAuth } from '@/components/AuthContext';
 
 const getLocalDrafts = (id: string): Record<number, Partial<Member>> => {
   if (typeof window === 'undefined') return {};
@@ -48,6 +48,7 @@ export default function TeamRosterPage({ params }: { params: Promise<{ id: strin
   const resolvedParams = use(params);
   const teamId = resolvedParams.id;
 
+  const { role, ownerCode, logout } = useAuth();
   const [team, setTeam] = useState<Team | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedSlot, setSelectedSlot] = useState<number>(1);
@@ -57,50 +58,20 @@ export default function TeamRosterPage({ params }: { params: Promise<{ id: strin
   const [hasSlotDraft, setHasSlotDraft] = useState<boolean>(false);
   const [draftSlots, setDraftSlots] = useState<number[]>([]);
   const [finalizing, setFinalizing] = useState(false);
-  const [isPanitiaMode, setIsPanitiaMode] = useState<boolean>(() => {
-    if (typeof window !== 'undefined') {
-      return Boolean(sessionStorage.getItem('lvm_admin_key'));
-    }
-    return false;
-  });
 
   const [formData, setFormData] = useState<Partial<Member>>({});
 
-  const handleTogglePanitiaMode = async () => {
-    if (isPanitiaMode) {
-      setIsPanitiaMode(false);
-      sessionStorage.removeItem('lvm_admin_key');
-      return;
-    }
-
-    const input = prompt('Aksi ini memerlukan verifikasi Panitia. Masukkan PIN Panitia:');
-    if (!input || !input.trim()) return;
-
-    try {
-      const res = await fetch('/api/auth/verify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pin: input.trim() }),
-      });
-      const data = await res.json();
-      if (data.valid) {
-        sessionStorage.setItem('lvm_admin_key', input.trim());
-        setIsPanitiaMode(true);
-        setErrorMessage(null);
-      } else {
-        sessionStorage.removeItem('lvm_admin_key');
-        setIsPanitiaMode(false);
-        alert(data.error || 'PIN Panitia salah! Akses ditolak.');
-      }
-    } catch {
-      alert('Gagal memverifikasi PIN. Silakan coba lagi.');
-    }
-  };
-
   const fetchTeam = useCallback(() => {
     return fetch(`/api/teams/${teamId}`)
-      .then(res => res.json())
+      .then(async res => {
+        if (res.status === 401) {
+          await logout();
+          return null;
+        }
+        return res.json();
+      })
       .then(data => {
+        if (!data) return;
         if (data.success && data.team) {
           setTeam(data.team);
           const drafts = getLocalDrafts(teamId);
@@ -125,7 +96,7 @@ export default function TeamRosterPage({ params }: { params: Promise<{ id: strin
       .finally(() => {
         setLoading(false);
       });
-  }, [teamId, selectedSlot]);
+  }, [teamId, selectedSlot, logout]);
 
   useEffect(() => {
     fetchTeam();
@@ -235,22 +206,19 @@ export default function TeamRosterPage({ params }: { params: Promise<{ id: strin
       }
     }
 
-    const isEditable = Boolean(team && (isPanitiaMode || team.status === 'Draft'));
-    if (!isEditable) {
-      setErrorMessage('Formulir pendaftaran bersifat final & terkunci. Masukkan PIN Panitia untuk membuka izin edit.');
+    const canEditTeam =
+      role === 'panpel' ||
+      (role === 'peserta' &&
+        !!team.ownerCode &&
+        team.ownerCode === ownerCode &&
+        team.status === 'Draft');
+    if (!canEditTeam) {
+      setErrorMessage('Anda tidak memiliki izin untuk mengubah data tim ini. Hubungi Panpel bila memerlukan perbaikan data.');
       return false;
     }
 
-    const adminKey = typeof window !== 'undefined' ? sessionStorage.getItem('lvm_admin_key') : null;
-
     try {
       setSaving(true);
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-      };
-      if (adminKey) {
-        headers['x-admin-key'] = adminKey;
-      }
 
       const isOfficial = selectedSlot > 15 || formData.teamRole !== 'Pemain';
       const updatesToSend: Partial<Member> = {
@@ -270,19 +238,19 @@ export default function TeamRosterPage({ params }: { params: Promise<{ id: strin
 
       const res = await fetch(`/api/teams/${teamId}/members`, {
         method: 'PUT',
-        headers,
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           memberId: currentMember.id,
           updates: updatesToSend,
         }),
       });
 
+      if (res.status === 401) {
+        await logout();
+        return false;
+      }
       const data = await res.json();
       if (!data.success) {
-        if (res.status === 401) {
-          sessionStorage.removeItem('lvm_admin_key');
-          setIsPanitiaMode(false);
-        }
         setErrorMessage(data.error || 'Gagal menyimpan data personel');
         return false;
       }
@@ -331,20 +299,17 @@ export default function TeamRosterPage({ params }: { params: Promise<{ id: strin
 
     try {
       setFinalizing(true);
-      const adminKey = typeof window !== 'undefined' ? sessionStorage.getItem('lvm_admin_key') : null;
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-      };
-      if (adminKey) {
-        headers['x-admin-key'] = adminKey;
-      }
 
       const res = await fetch(`/api/teams/${teamId}`, {
         method: 'PUT',
-        headers,
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: 'Lengkap' }),
       });
 
+      if (res.status === 401) {
+        await logout();
+        return;
+      }
       const data = await res.json();
       if (!data.success) {
         setErrorMessage(data.error || 'Gagal memfinalisasi pendaftaran.');
@@ -419,7 +384,9 @@ export default function TeamRosterPage({ params }: { params: Promise<{ id: strin
   const officialsFilledCount = team.members.filter(m => m.teamRole !== 'Pemain' && m.fullName && m.fullName.trim() !== '').length;
   const isAllComplete = filledCount === 20;
   const isPlayerSlot = selectedSlot <= 15;
-  const isEditable = Boolean(team && (isPanitiaMode || team.status === 'Draft'));
+  const isOwner = role === 'peserta' && !!team.ownerCode && team.ownerCode === ownerCode;
+  const canEditTeam = role === 'panpel' || (isOwner && team.status === 'Draft');
+  const isEditable = canEditTeam;
 
   return (
     <div className="space-y-5 sm:space-y-6 pb-20 max-w-7xl mx-auto">
@@ -446,28 +413,6 @@ export default function TeamRosterPage({ params }: { params: Promise<{ id: strin
         </div>
 
         <div className="flex items-center gap-2 pt-1 sm:pt-0">
-          <button
-            type="button"
-            onClick={handleTogglePanitiaMode}
-            className={`px-3 py-2 rounded-xl text-xs font-bold border transition-all shadow-xs flex items-center justify-center gap-1.5 cursor-pointer ${
-              isPanitiaMode
-                ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800'
-                : 'bg-white dark:bg-[#15072c] hover:bg-purple-50 dark:hover:bg-purple-900/50 text-slate-700 dark:text-purple-200 border border-purple-200 dark:border-purple-800/60'
-            }`}
-            title="Buka akses edit khusus Panitia dengan PIN"
-          >
-            {isPanitiaMode ? (
-              <>
-                <Unlock className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                <span>Mode Panitia (Aktif)</span>
-              </>
-            ) : (
-              <>
-                <Lock className="w-3.5 h-3.5 text-slate-500" />
-                <span>Mode Panitia</span>
-              </>
-            )}
-          </button>
           <Link
             href={`/teams/${team.id}`}
             className="flex-1 sm:flex-none text-center px-3.5 py-2 rounded-xl text-xs font-bold bg-white dark:bg-[#15072c] hover:bg-purple-50 dark:hover:bg-purple-900/50 text-slate-800 dark:text-purple-200 border border-purple-200 dark:border-purple-800/60 transition-all shadow-xs"
@@ -740,57 +685,53 @@ export default function TeamRosterPage({ params }: { params: Promise<{ id: strin
               </div>
             </div>
 
-            {/* Status Kunci Formulir (Google Form Style) */}
-            {team.status === 'Draft' && !isPanitiaMode ? (
+            {isEditable ? (
               <div className="mb-5 p-3.5 rounded-xl bg-pink-50/90 dark:bg-pink-950/40 border border-pink-200 dark:border-pink-800/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-pink-950 dark:text-pink-200 text-xs shadow-xs">
                 <div className="flex items-start gap-2.5">
                   <Shirt className="w-4 h-4 text-pink-600 dark:text-pink-400 shrink-0 mt-0.5" />
                   <div>
-                    <span className="font-bold">Tahap Pengisian Roster Tim (Pendaftaran Sedang Berjalan):</span>
-                    <p className="mt-0.5 text-pink-900 dark:text-pink-300/80 text-[11px] leading-relaxed">
-                      Silakan isi data pemain & official tim di bawah ini. Setiap slot tersimpan otomatis. Setelah selesai, klik <strong>&quot;Kunci &amp; Selesaikan Pendaftaran&quot;</strong>.
-                    </p>
+                    <span className="font-bold">
+                      {role === 'panpel'
+                        ? 'Mode Panpel: Anda dapat memperbarui data personel tim ini.'
+                        : 'Tahap Pengisian Roster Tim (Pendaftaran Sedang Berjalan):'}
+                    </span>
+                    {role !== 'panpel' && (
+                      <p className="mt-0.5 text-pink-900 dark:text-pink-300/80 text-[11px] leading-relaxed">
+                        Silakan isi data pemain &amp; official tim di bawah ini. Setiap slot tersimpan otomatis. Setelah selesai, klik <strong>&quot;Kunci &amp; Selesaikan Pendaftaran&quot;</strong>.
+                      </p>
+                    )}
                   </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={handleFinalizeSubmission}
-                  disabled={finalizing}
-                  className="px-3.5 py-2 rounded-xl text-xs font-black uppercase tracking-wider bg-pink-600 hover:bg-pink-500 text-white shadow-sm transition-all shrink-0 cursor-pointer self-end sm:self-center"
-                >
-                  {finalizing ? 'Mengunci...' : 'Kunci & Submit Final'}
-                </button>
+                {team.status === 'Draft' && (
+                  <button
+                    type="button"
+                    onClick={handleFinalizeSubmission}
+                    disabled={finalizing}
+                    className="px-3.5 py-2 rounded-xl text-xs font-black uppercase tracking-wider bg-pink-600 hover:bg-pink-500 text-white shadow-sm transition-all shrink-0 cursor-pointer self-end sm:self-center"
+                  >
+                    {finalizing ? 'Mengunci...' : 'Kunci & Submit Final'}
+                  </button>
+                )}
               </div>
-            ) : !isPanitiaMode ? (
+            ) : role === 'mojisport' ? (
+              <div className="mb-5 p-3.5 rounded-xl bg-sky-50/80 dark:bg-sky-950/30 border border-sky-200/80 dark:border-sky-800/60 flex items-start gap-3 text-sky-900 dark:text-sky-200 text-xs">
+                <Lock className="w-4 h-4 text-sky-600 dark:text-sky-400 shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <span className="font-bold">Mode Lihat MojiSport:</span>
+                  <p className="mt-0.5 text-sky-800 dark:text-sky-300/80 text-[11px] leading-relaxed">
+                    Anda membuka data roster tim ini dalam mode lihat saja dan tidak dapat mengubah data.
+                  </p>
+                </div>
+              </div>
+            ) : (
               <div className="mb-5 p-3.5 rounded-xl bg-amber-50/80 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-800/60 flex items-start gap-3 text-amber-900 dark:text-amber-200 text-xs">
                 <Lock className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
                 <div className="flex-1">
                   <span className="font-bold">Formulir Pendaftaran Bersifat Final (Read-Only):</span>
                   <p className="mt-0.5 text-amber-800 dark:text-amber-300/80 text-[11px] leading-relaxed">
-                    Sesuai ketentuan, data tim dan personel yang telah disubmit tidak dapat diubah atau dihapus secara mandiri oleh pendaftar. Jika memerlukan perbaikan data, silakan hubungi Panitia LVM.
+                    Data tim ini terkunci dan tidak dapat diubah. Jika memerlukan perbaikan data, silakan hubungi Panpel LVM.
                   </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={handleTogglePanitiaMode}
-                  className="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-amber-200/70 hover:bg-amber-200 dark:bg-amber-900/60 dark:hover:bg-amber-800 text-amber-950 dark:text-amber-100 shrink-0 cursor-pointer"
-                >
-                  Buka Edit (Panitia)
-                </button>
-              </div>
-            ) : (
-              <div className="mb-5 p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 flex items-center justify-between text-emerald-900 dark:text-emerald-200 text-xs">
-                <div className="flex items-center gap-2">
-                  <Unlock className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                  <span className="font-bold">Mode Edit Panitia Terbuka. Anda dapat memperbarui data personel tim ini.</span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setIsPanitiaMode(false)}
-                  className="text-[11px] font-bold text-slate-500 hover:text-slate-800 dark:hover:text-white underline cursor-pointer"
-                >
-                  Kunci Kembali
-                </button>
               </div>
             )}
 
@@ -1081,7 +1022,7 @@ export default function TeamRosterPage({ params }: { params: Promise<{ id: strin
                   <>
                     <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-purple-300/80">
                       <Lock className="w-3.5 h-3.5 text-amber-500" />
-                      <span>Formulir Terkunci (Mode Lihat). Aktifkan Mode Panitia untuk mengedit.</span>
+                      <span>{role === 'mojisport' ? 'Formulir Terkunci (Mode Lihat).' : 'Formulir Terkunci. Hubungi Panpel bila memerlukan perbaikan data.'}</span>
                     </div>
 
                     <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
@@ -1119,7 +1060,7 @@ export default function TeamRosterPage({ params }: { params: Promise<{ id: strin
                         {saving ? 'Menyimpan...' : 'Simpan Slot Ini'}
                       </button>
 
-                      {team.status === 'Draft' && !isPanitiaMode && (
+                      {team.status === 'Draft' && isEditable && (
                         <button
                           type="button"
                           onClick={handleFinalizeSubmission}

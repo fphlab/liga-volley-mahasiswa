@@ -4,7 +4,7 @@ import { createSessionToken, SESSION_COOKIE, sessionCookieOptions } from '@/lib/
 import { checkRateLimit, getClientIp } from '@/lib/rateLimit';
 
 export async function POST(request: NextRequest) {
-  const rateLimit = checkRateLimit(`verify:${getClientIp(request)}`, {
+  const rateLimit = checkRateLimit(`login:${getClientIp(request)}`, {
     limit: 10,
     windowMs: 60000,
   });
@@ -13,20 +13,27 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         success: false,
-        valid: false,
-        error: `Terlalu banyak percobaan verifikasi. Silakan coba lagi dalam ${rateLimit.retryAfterSeconds} detik.`,
+        error: `Terlalu banyak percobaan login. Silakan coba lagi dalam ${rateLimit.retryAfterSeconds} detik.`,
       },
-      { status: 429 }
+      {
+        status: 429,
+        headers: {
+          'Retry-After': String(rateLimit.retryAfterSeconds),
+          'X-RateLimit-Limit': String(rateLimit.limit),
+          'X-RateLimit-Remaining': String(rateLimit.remaining),
+          'X-RateLimit-Reset': String(rateLimit.resetTime),
+        },
+      }
     );
   }
 
   const body = await request.json().catch(() => ({}));
-  const code = typeof body?.code === 'string' ? body.code : typeof body?.pin === 'string' ? body.pin : '';
+  const code = typeof body?.code === 'string' ? body.code : '';
 
   const actor = resolveAccessCode(code);
   if (!actor) {
     return NextResponse.json(
-      { success: false, valid: false, error: 'Kode Akses tidak terdaftar.' },
+      { success: false, error: 'Kode Akses tidak terdaftar.' },
       { status: 401 }
     );
   }
@@ -34,7 +41,6 @@ export async function POST(request: NextRequest) {
   const token = createSessionToken(actor);
   const response = NextResponse.json({
     success: true,
-    valid: true,
     role: actor.role,
     subject: actor.subject,
   });

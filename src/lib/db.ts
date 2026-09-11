@@ -76,11 +76,16 @@ function describeBackendError(error: unknown): string | null {
 // READ
 // ============================================================
 
-export async function getAllTeams(filterRegion?: Region, filterCategory?: Category): Promise<Team[]> {
+export async function getAllTeams(filterRegion?: Region, filterCategory?: Category, filterOwnerCode?: string): Promise<Team[]> {
   const backend = await getDataBackend();
-  return backend.fetchTeamsWithMembers(
-    filterRegion || filterCategory ? { region: filterRegion, category: filterCategory } : undefined
-  );
+  if (!filterRegion && !filterCategory && !filterOwnerCode) {
+    return backend.fetchTeamsWithMembers(undefined);
+  }
+  return backend.fetchTeamsWithMembers({
+    region: filterRegion,
+    category: filterCategory,
+    ownerCode: filterOwnerCode,
+  });
 }
 
 export async function getTeamById(id: string): Promise<Team | null> {
@@ -145,7 +150,7 @@ export async function clearAllTeams(): Promise<void> {
   return backend.deleteAllTeams();
 }
 
-function buildDefaultMembers(teamId: string, teamNumber: string): Member[] {
+export function buildDefaultMembers(teamId: string, teamNumber: string): Member[] {
   const nowIso = new Date().toISOString();
   const base = {
     teamId,
@@ -257,6 +262,7 @@ export function createTeam(data: {
           category: data.category,
           contactPerson: data.contactPerson ?? '',
           contactPhone: data.contactPhone ?? '',
+          ownerCode: '',
           members: buildDefaultMembers(teamId, teamNumber),
           status: 'Draft',
           createdAt: nowIso,
@@ -309,6 +315,7 @@ const TEAM_PATCH_FIELDS: Partial<Record<keyof Team, string>> = {
   contactPerson: 'contact_person',
   contactPhone: 'contact_phone',
   status: 'status',
+  ownerCode: 'owner_code',
 };
 
 export function updateTeam(id: string, updates: Partial<Team>): Promise<{ success: boolean; team?: Team; error?: string }> {

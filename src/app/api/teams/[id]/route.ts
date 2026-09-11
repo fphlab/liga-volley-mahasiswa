@@ -1,12 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getTeamById, updateTeam, deleteTeam } from '@/lib/db';
-import { verifyAdminKey } from '@/lib/auth';
+import { getTeamById, getAllTeams, updateTeam, deleteTeam } from '@/lib/db';
+import { AuthError, requireActor } from '@/lib/auth';
+import type { Team } from '@/lib/types';
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    requireActor(request);
+
     const { id } = await params;
     const team = await getTeamById(id);
 
@@ -19,6 +22,9 @@ export async function GET(
 
     return NextResponse.json({ success: true, team });
   } catch (error) {
+    if (error instanceof AuthError) {
+      return NextResponse.json({ success: false, error: error.message }, { status: error.status });
+    }
     console.error('Error getting team:', error);
     return NextResponse.json(
       {
@@ -40,9 +46,9 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const actor = requireActor(request);
     const { id } = await params;
-    const isAdmin = verifyAdminKey(request);
-    const body = await request.json();
+    const body = await request.json() as Record<string, unknown>;
 
     const existingTeam = await getTeamById(id);
     if (!existingTeam) {
@@ -52,33 +58,77 @@ export async function PUT(
       );
     }
 
-    // Sesuai brief klien (gaya Google Form):
-    // Pendaftar publik HANYA diizinkan memfinalisasi pendaftaran (mengubah status Draft -> Lengkap).
-    // Mutasi lain (seperti verifikasi tim, ganti region/nama, atau edit tim yang sudah final) wajib PIN Panitia.
-    if (!isAdmin) {
-      const isFinalizingDraft =
-        existingTeam.status === 'Draft' &&
-        body.status === 'Lengkap' &&
-        Object.keys(body).length === 1;
+    const keys = Object.keys(body);
 
-      if (!isFinalizingDraft) {
-        return NextResponse.json(
-          {
-            success: false,
-            error: 'Akses ditolak: Formulir pendaftaran bersifat final (terkunci). Perubahan data hanya dapat dilakukan oleh Panitia.',
-          },
-          { status: 401 }
-        );
+    const isOwnerCodeOnly =
+      keys.length === 1 && keys[0] === 'ownerCode' && typeof body.ownerCode === 'string';
+
+    if (isOwnerCodeOnly) {
+      if (actor.role !== 'panpel') {
+        throw new AuthError('Anda tidak memiliki izin untuk aksi ini.', 403);
       }
+      const nextOwnerCode = body.ownerCode as string;
+      if (nextOwnerCode !== '') {
+        const allTeams = await getAllTeams();
+        const conflict = allTeams.find(
+          (t) => t.id !== id && t.ownerCode !== '' && t.ownerCode === nextOwnerCode
+        );
+        if (conflict) {
+          return NextResponse.json(
+            { success: false, error: `Kode akses sudah dipakai oleh tim "${conflict.name}". Lepaskan dulu sebelum assign ulang.` },
+            { status: 400 }
+          );
+        }
+      }
+      const result = await updateTeam(id, { ownerCode: nextOwnerCode });
+      if (!result.success) {
+        return NextResponse.json({ success: false, error: result.error }, { status: 400 });
+      }
+      return NextResponse.json({ success: true, team: result.team });
     }
 
-    const result = await updateTeam(id, body);
+    const isFinalizingDraft =
+      existingTeam.status === 'Draft' &&
+      keys.length === 1 &&
+      keys[0] === 'status' &&
+      body.status === 'Lengkap';
+
+    if (isFinalizingDraft) {
+      if (actor.role === 'panpel') {
+        const result = await updateTeam(id, { status: 'Lengkap' });
+        if (!result.success) {
+          return NextResponse.json({ success: false, error: result.error }, { status: 400 });
+        }
+        return NextResponse.json({ success: true, team: result.team });
+      }
+      if (actor.role === 'peserta') {
+        const ownerCode = existingTeam.ownerCode ?? '';
+        if (ownerCode === '' || ownerCode !== actor.ownerCode) {
+          throw new AuthError('Anda tidak memiliki izin untuk aksi ini.', 403);
+        }
+        const result = await updateTeam(id, { status: 'Lengkap' });
+        if (!result.success) {
+          return NextResponse.json({ success: false, error: result.error }, { status: 400 });
+        }
+        return NextResponse.json({ success: true, team: result.team });
+      }
+      throw new AuthError('Anda tidak memiliki izin untuk aksi ini.', 403);
+    }
+
+    if (actor.role !== 'panpel') {
+      throw new AuthError('Anda tidak memiliki izin untuk aksi ini.', 403);
+    }
+
+    const result = await updateTeam(id, body as Partial<Team>);
     if (!result.success) {
       return NextResponse.json({ success: false, error: result.error }, { status: 400 });
     }
 
     return NextResponse.json({ success: true, team: result.team });
   } catch (error) {
+    if (error instanceof AuthError) {
+      return NextResponse.json({ success: false, error: error.message }, { status: error.status });
+    }
     console.error('Error updating team:', error);
     return NextResponse.json(
       {
@@ -99,18 +149,9 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  // Hanya Panitia dengan Secret PIN yang berhak menghapus tim.
-  if (!verifyAdminKey(request)) {
-    return NextResponse.json(
-      {
-        success: false,
-        error: 'Akses ditolak: Data pendaftaran tidak dapat dihapus oleh umum. Aksi ini hanya dapat dilakukan oleh Panitia.',
-      },
-      { status: 401 }
-    );
-  }
-
   try {
+    requireActor(request, ['panpel']);
+
     const { id } = await params;
     const result = await deleteTeam(id);
     if (!result.success) {
@@ -119,6 +160,9 @@ export async function DELETE(
 
     return NextResponse.json({ success: true, message: 'Tim berhasil dihapus' });
   } catch (error) {
+    if (error instanceof AuthError) {
+      return NextResponse.json({ success: false, error: error.message }, { status: error.status });
+    }
     console.error('Error deleting team:', error);
     return NextResponse.json(
       {

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import {
   Trophy,
@@ -22,116 +22,205 @@ import { Team, RegionalQuota } from '@/lib/types';
 import QuotaCard from '@/components/QuotaCard';
 import LvmLogo from '@/components/LvmLogo';
 import { useAppMode } from '@/components/AppModeContext';
+import { useAuth } from '@/components/AuthContext';
 import ProductionLanding from '@/components/ProductionLanding';
+
+interface OwnerCodeEntry {
+  code: string;
+  role: string;
+  usedByTeamId: string | null;
+  usedByTeamName: string | null;
+}
 
 export default function DashboardPage() {
   const { isProductionHolding } = useAppMode();
+  const { role, logout } = useAuth();
   const [teams, setTeams] = useState<Team[]>([]);
   const [quota, setQuota] = useState<RegionalQuota[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedRegion, setSelectedRegion] = useState<string>('ALL');
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
+  const [codes, setCodes] = useState<OwnerCodeEntry[]>([]);
+  const [codesLoading, setCodesLoading] = useState(true);
+  const [draftOwner, setDraftOwner] = useState<Record<string, string>>({});
+  const [savingOwnerId, setSavingOwnerId] = useState<string | null>(null);
 
-  const fetchData = () => {
-    return fetch('/api/teams')
-      .then(res => res.json())
-      .then(data => {
-        if (data.success) {
-          setTeams(data.teams);
-          setQuota(data.quota);
+  const isPanpel = role === 'panpel';
+  const isMojisport = role === 'mojisport';
+
+  const handleAuthError = useCallback(
+    async (res: Response, data: { error?: string } | null, fallback: string): Promise<boolean> => {
+      if (res.status === 401) {
+        await logout();
+        return true;
+      }
+      if (res.status === 403) {
+        alert(data?.error ?? fallback);
+        return true;
+      }
+      return false;
+    },
+    [logout]
+  );
+
+  // Gaya promise-chain (bukan async/await) agar pemanggilan dari useEffect
+  // tidak dianggap setState sinkron oleh react-hooks/set-state-in-effect.
+  const fetchData = useCallback(() => {
+    return fetch('/api/teams', { cache: 'no-store' })
+      .then((res) =>
+        res
+          .json()
+          .catch(() => null)
+          .then(
+            (
+              data: {
+                success: boolean;
+                teams?: Team[];
+                quota?: RegionalQuota[];
+                error?: string;
+              } | null
+            ) => ({ res, data })
+          )
+      )
+      .then(({ res, data }) => {
+        if (!res.ok) {
+          void handleAuthError(res, data, 'Akses ditolak.').then((handled) => {
+            if (!handled) alert(data?.error ?? 'Gagal memuat data tim.');
+          });
+          return;
+        }
+        if (data?.success) {
+          setTeams(data.teams ?? []);
+          setQuota(data.quota ?? []);
         }
       })
-      .catch(err => {
+      .catch((err: unknown) => {
         console.error('Error fetching data:', err);
       })
       .finally(() => {
         setLoading(false);
       });
-  };
+  }, [handleAuthError]);
+
+  const fetchCodes = useCallback(() => {
+    return fetch('/api/auth/codes', { cache: 'no-store' })
+      .then((res) =>
+        res
+          .json()
+          .catch(() => null)
+          .then(
+            (
+              data: {
+                success: boolean;
+                codes?: OwnerCodeEntry[];
+                error?: string;
+              } | null
+            ) => ({ res, data })
+          )
+      )
+      .then(({ res, data }) => {
+        if (!res.ok) {
+          if (res.status === 401) {
+            void logout();
+          }
+          return;
+        }
+        if (data?.success) {
+          setCodes(data.codes ?? []);
+        }
+      })
+      .catch((err: unknown) => {
+        console.error('Error fetching codes:', err);
+      })
+      .finally(() => {
+        setCodesLoading(false);
+      });
+  }, [logout]);
 
   useEffect(() => {
     if (!isProductionHolding) {
-      fetchData();
+      void fetchData();
     }
-  }, [isProductionHolding]);
+  }, [isProductionHolding, fetchData]);
+
+  useEffect(() => {
+    if (!isProductionHolding && isPanpel) {
+      void fetchCodes();
+    }
+  }, [isProductionHolding, isPanpel, fetchCodes]);
+
+  // Kode hanya bermakna untuk Panpel; peran lain selalu melihat daftar kosong.
+  const visibleCodes = isPanpel ? codes : [];
 
   if (isProductionHolding) {
     return <ProductionLanding />;
   }
 
-  const getAdminKey = async (): Promise<string | null> => {
-    const saved = typeof window !== 'undefined' ? sessionStorage.getItem('lvm_admin_key') : null;
-    if (saved) {
-      try {
-        const check = await fetch('/api/auth/verify', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ pin: saved }),
-        });
-        const data = await check.json();
-        if (data.valid) return saved;
-      } catch {}
-      sessionStorage.removeItem('lvm_admin_key');
-    }
-
-    const input = prompt('Aksi ini memerlukan verifikasi Panitia. Masukkan PIN Panitia:');
-    if (!input || !input.trim()) return null;
-
-    try {
-      const res = await fetch('/api/auth/verify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pin: input.trim() }),
-      });
-      const data = await res.json();
-      if (data.valid) {
-        sessionStorage.setItem('lvm_admin_key', input.trim());
-        return input.trim();
-      } else {
-        sessionStorage.removeItem('lvm_admin_key');
-        alert(data.error || 'PIN Panitia salah! Akses ditolak.');
-        return null;
-      }
-    } catch {
-      alert('Gagal memverifikasi PIN Panitia.');
-      return null;
-    }
-  };
-
   const handleDeleteTeam = async (id: string, name: string) => {
-    const adminKey = await getAdminKey();
-    if (!adminKey) {
-      return;
-    }
-
-    if (!confirm(`[PANITIA] Hapus data tim "${name}" beserta seluruh 20 anggotanya?`)) {
+    if (!confirm(`Hapus data tim "${name}" beserta seluruh 20 anggotanya?`)) {
       return;
     }
     try {
-      const res = await fetch(`/api/teams/${id}`, {
-        method: 'DELETE',
-        headers: {
-          'x-admin-key': adminKey,
-        },
-      });
-      const data = await res.json();
-      if (data.success) {
-        fetchData();
-      } else {
-        if (res.status === 401) {
-          sessionStorage.removeItem('lvm_admin_key'); // Hapus PIN jika salah
-        }
-        alert(data.error || 'Gagal menghapus tim');
+      const res = await fetch(`/api/teams/${id}`, { method: 'DELETE' });
+      const data = (await res.json().catch(() => null)) as {
+        success: boolean;
+        error?: string;
+      } | null;
+      if (!res.ok || !data?.success) {
+        if (await handleAuthError(res, data, 'Anda tidak memiliki izin untuk menghapus tim.')) return;
+        alert(data?.error ?? 'Gagal menghapus tim');
+        return;
       }
+      await fetchData();
     } catch (err) {
       console.error(err);
       alert('Terjadi kesalahan saat menghapus tim');
     }
   };
 
+  const handleSaveOwner = async (team: Team) => {
+    const nextOwner = draftOwner[team.id] ?? team.ownerCode ?? '';
+    if (nextOwner === (team.ownerCode ?? '')) return;
+    setSavingOwnerId(team.id);
+    try {
+      const res = await fetch(`/api/teams/${team.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ownerCode: nextOwner }),
+      });
+      const data = (await res.json().catch(() => null)) as {
+        success: boolean;
+        error?: string;
+      } | null;
+      if (!res.ok || !data?.success) {
+        if (await handleAuthError(res, data, 'Anda tidak memiliki izin untuk mengatur pemilik tim.')) return;
+        alert(data?.error ?? 'Gagal menyimpan pemilik tim.');
+        return;
+      }
+      await fetchData();
+      await fetchCodes();
+    } catch (err) {
+      console.error(err);
+      alert('Terjadi kesalahan saat menyimpan pemilik tim.');
+    } finally {
+      setSavingOwnerId(null);
+    }
+  };
+
+  const ownerLabel = (team: Team): string => {
+    const current = team.ownerCode?.trim() ? team.ownerCode : '';
+    return current === '' ? 'Belum di-assign' : current;
+  };
+
+  const codeOptionLabel = (entry: OwnerCodeEntry, teamId: string): string => {
+    if (entry.usedByTeamId === teamId) return `${entry.code} · tim ini`;
+    if (entry.usedByTeamId && entry.usedByTeamName) return `${entry.code} · dipakai ${entry.usedByTeamName}`;
+    return `${entry.code} · tersedia`;
+  };
+
   const filteredTeams = teams.filter(team => {
-    const matchesSearch = 
+    const matchesSearch =
       team.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       team.teamNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
       team.province.toLowerCase().includes(searchTerm.toLowerCase());
@@ -143,12 +232,15 @@ export default function DashboardPage() {
   const totalRegisteredTeams = teams.length;
   const maxTotalTeams = 36;
   const totalCompletedTeams = teams.filter(t => t.status === 'Lengkap' || t.status === 'Terverifikasi').length;
-  
+
   let totalRegisteredPersonnel = 0;
   teams.forEach(t => {
     totalRegisteredPersonnel += t.members.filter(m => m.fullName && m.fullName.trim() !== '').length;
   });
   const maxPersonnel = 36 * 20;
+
+  const rosterLabel = isMojisport ? 'Lihat' : 'Roster';
+  const rosterMobileLabel = isMojisport ? 'Lihat Tim' : 'Kelola 20 Personel';
 
   return (
     <div className="space-y-6 sm:space-y-8 pb-16">
@@ -179,13 +271,15 @@ export default function DashboardPage() {
           </div>
 
           <div className="flex items-center gap-3 shrink-0">
-            <Link
-              href="/"
-              className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl font-black text-xs uppercase tracking-wider bg-pink-600 hover:bg-pink-500 text-white shadow-md active:scale-95 transition-all"
-            >
-              <Plus className="w-4 h-4 stroke-[3]" />
-              Daftar Tim Baru
-            </Link>
+            {isPanpel && (
+              <Link
+                href="/"
+                className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl font-black text-xs uppercase tracking-wider bg-pink-600 hover:bg-pink-500 text-white shadow-md active:scale-95 transition-all"
+              >
+                <Plus className="w-4 h-4 stroke-[3]" />
+                Daftar Tim Baru
+              </Link>
+            )}
             <Link
               href="/reports"
               className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs bg-white/10 hover:bg-white/20 text-white border border-white/20 backdrop-blur-sm transition-all"
@@ -216,7 +310,7 @@ export default function DashboardPage() {
             <span className="text-xs font-semibold text-slate-400 dark:text-purple-400/60">/ {maxTotalTeams} Kuota</span>
           </div>
           <div className="w-full bg-purple-100 dark:bg-purple-950/60 h-2 rounded-full mt-3 overflow-hidden">
-            <div 
+            <div
               className="bg-gradient-to-r from-pink-600 to-fuchsia-600 h-full rounded-full transition-all duration-500 shadow-neon-pink"
               style={{ width: `${(totalRegisteredTeams / maxTotalTeams) * 100}%` }}
             />
@@ -240,7 +334,7 @@ export default function DashboardPage() {
             <span className="text-xs font-semibold text-slate-400 dark:text-purple-400/60">/ {maxPersonnel} Orang</span>
           </div>
           <div className="w-full bg-purple-100 dark:bg-purple-950/60 h-2 rounded-full mt-3 overflow-hidden">
-            <div 
+            <div
               className="bg-gradient-to-r from-emerald-500 to-teal-500 h-full rounded-full transition-all duration-500"
               style={{ width: `${(totalRegisteredPersonnel / maxPersonnel) * 100}%` }}
             />
@@ -264,7 +358,7 @@ export default function DashboardPage() {
             <span className="text-xs font-semibold text-slate-400 dark:text-purple-400/60">/ {totalRegisteredTeams} Tim</span>
           </div>
           <div className="w-full bg-purple-100 dark:bg-purple-950/60 h-2 rounded-full mt-3 overflow-hidden">
-            <div 
+            <div
               className="bg-gradient-to-r from-purple-600 to-pink-500 h-full rounded-full transition-all duration-500"
               style={{ width: `${totalRegisteredTeams > 0 ? (totalCompletedTeams / totalRegisteredTeams) * 100 : 0}%` }}
             />
@@ -364,6 +458,7 @@ export default function DashboardPage() {
                     <th className="py-3 px-3">Asal Provinsi</th>
                     <th className="py-3 px-3">Kelengkapan (20)</th>
                     <th className="py-3 px-3">Status</th>
+                    {isPanpel && <th className="py-3 px-3">Pemilik</th>}
                     <th className="py-3 px-3 text-right">Aksi</th>
                   </tr>
                 </thead>
@@ -371,6 +466,10 @@ export default function DashboardPage() {
                   {filteredTeams.map(team => {
                     const filledCount = team.members.filter(m => m.fullName && m.fullName.trim() !== '').length;
                     const isComplete = filledCount === 20;
+                    const currentOwner = team.ownerCode ?? '';
+                    const selectedOwner = draftOwner[team.id] ?? currentOwner;
+                    const ownerDirty = selectedOwner !== currentOwner;
+                    const saving = savingOwnerId === team.id;
 
                     return (
                       <tr key={team.id} className="hover:bg-purple-50/40 dark:hover:bg-purple-950/30 transition-colors">
@@ -433,6 +532,44 @@ export default function DashboardPage() {
                             </span>
                           )}
                         </td>
+                        {isPanpel && (
+                          <td className="py-3 px-3">
+                            <div className="min-w-[170px] max-w-[220px] space-y-1.5">
+                              <div className="text-[11px] text-slate-500 dark:text-purple-300/70">
+                                Saat ini:{' '}
+                                <span className="font-mono font-bold text-slate-800 dark:text-purple-100">
+                                  {ownerLabel(team)}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                <select
+                                  value={selectedOwner}
+                                  disabled={codesLoading || saving}
+                                  onChange={e =>
+                                    setDraftOwner(prev => ({ ...prev, [team.id]: e.target.value }))
+                                  }
+                                  className="flex-1 min-w-0 py-1.5 px-2 rounded-lg bg-purple-50/50 dark:bg-[#1f0e3f] border border-purple-200/70 dark:border-purple-800/60 text-[11px] font-mono text-slate-800 dark:text-white focus:outline-none focus:border-pink-500"
+                                  aria-label={`Pemilik tim ${team.name}`}
+                                >
+                                  <option value="">Belum di-assign</option>
+                                  {visibleCodes.map(entry => (
+                                    <option key={entry.code} value={entry.code}>
+                                      {codeOptionLabel(entry, team.id)}
+                                    </option>
+                                  ))}
+                                </select>
+                                <button
+                                  type="button"
+                                  onClick={() => void handleSaveOwner(team)}
+                                  disabled={!ownerDirty || saving || codesLoading}
+                                  className="shrink-0 px-2.5 py-1.5 rounded-lg text-[11px] font-bold bg-purple-700 hover:bg-purple-600 disabled:opacity-40 disabled:cursor-not-allowed text-white transition-all"
+                                >
+                                  {saving ? '...' : 'Simpan'}
+                                </button>
+                              </div>
+                            </div>
+                          </td>
+                        )}
                         <td className="py-3 px-3 text-right">
                           <div className="flex items-center justify-end gap-1.5">
                             <Link
@@ -440,7 +577,7 @@ export default function DashboardPage() {
                               className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold bg-pink-600 hover:bg-pink-500 text-white transition-all shadow-xs"
                             >
                               <Users className="w-3 h-3" />
-                              Roster
+                              {rosterLabel}
                             </Link>
                             <Link
                               href={`/teams/${team.id}`}
@@ -449,13 +586,15 @@ export default function DashboardPage() {
                             >
                               <ExternalLink className="w-3.5 h-3.5" />
                             </Link>
-                            <button
-                              onClick={() => handleDeleteTeam(team.id, team.name)}
-                              className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer"
-                              title="Hapus Tim"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
+                            {isPanpel && (
+                              <button
+                                onClick={() => void handleDeleteTeam(team.id, team.name)}
+                                className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer"
+                                title="Hapus Tim"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -505,13 +644,63 @@ export default function DashboardPage() {
                       </div>
                     </div>
 
+                    {isPanpel ? (
+                      <div className="text-[11px] text-slate-600 dark:text-purple-300/80">
+                        Pemilik:{' '}
+                        <span className="font-mono font-bold text-slate-800 dark:text-purple-100">
+                          {ownerLabel(team)}
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="text-[11px] text-slate-500 dark:text-purple-300/60">
+                        Status:{' '}
+                        <span className="font-bold text-slate-700 dark:text-purple-200">
+                          {team.status}
+                        </span>
+                      </div>
+                    )}
+
+                    {isPanpel && (
+                      <div className="flex items-center gap-1.5">
+                        <select
+                          value={draftOwner[team.id] ?? team.ownerCode ?? ''}
+                          disabled={codesLoading || savingOwnerId === team.id}
+                          onChange={e =>
+                            setDraftOwner(prev => ({ ...prev, [team.id]: e.target.value }))
+                          }
+                          className="flex-1 min-w-0 py-2 px-2 rounded-lg bg-white dark:bg-[#15072c] border border-purple-200 dark:border-purple-800 text-[11px] font-mono text-slate-800 dark:text-white focus:outline-none focus:border-pink-500"
+                          aria-label={`Pemilik tim ${team.name}`}
+                        >
+                          <option value="">Belum di-assign</option>
+                          {visibleCodes.map(entry => (
+                            <option key={entry.code} value={entry.code}>
+                              {codeOptionLabel(entry, team.id)}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          onClick={() => void handleSaveOwner(team)}
+                          disabled={
+                            (draftOwner[team.id] ?? team.ownerCode ?? '') ===
+                              (team.ownerCode ?? '') ||
+                            savingOwnerId === team.id ||
+                            codesLoading
+                          }
+                          className="shrink-0 px-3 py-2 rounded-lg text-[11px] font-bold bg-purple-700 hover:bg-purple-600 disabled:opacity-40 disabled:cursor-not-allowed text-white transition-all"
+                        >
+                          {savingOwnerId === team.id ? '...' : 'Simpan'}
+                        </button>
+                      </div>
+                    )}
+
                     <div className="flex items-center justify-between gap-2 pt-1">
                       <Link
                         href={`/teams/${team.id}/roster`}
                         className="flex-1 text-center py-2 rounded-lg text-xs font-bold bg-pink-600 hover:bg-pink-500 text-white flex items-center justify-center gap-1.5 shadow-sm"
                       >
                         <Users className="w-3.5 h-3.5" />
-                        <span>Kelola 20 Personel</span>
+                        <span>{rosterMobileLabel}</span>
                       </Link>
 
                       <Link
@@ -522,13 +711,15 @@ export default function DashboardPage() {
                         <ExternalLink className="w-3.5 h-3.5" />
                       </Link>
 
-                      <button
-                        onClick={() => handleDeleteTeam(team.id, team.name)}
-                        className="p-2 rounded-lg bg-white dark:bg-[#15072c] border border-purple-200 dark:border-purple-800 text-slate-400 hover:text-rose-600"
-                        title="Hapus"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                      {isPanpel && (
+                        <button
+                          onClick={() => void handleDeleteTeam(team.id, team.name)}
+                          className="p-2 rounded-lg bg-white dark:bg-[#15072c] border border-purple-200 dark:border-purple-800 text-slate-400 hover:text-rose-600"
+                          title="Hapus"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                     </div>
                   </div>
                 );

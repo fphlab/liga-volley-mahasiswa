@@ -37,7 +37,7 @@ async function findMemberByIdImpl(teamId: string, memberId: string): Promise<Mem
 export const supabaseBackend: DataBackend = {
   name: 'supabase',
 
-  async fetchTeamsWithMembers(filter?: { region?: Region; category?: Category }): Promise<Team[]> {
+  async fetchTeamsWithMembers(filter?: { region?: Region; category?: Category; ownerCode?: string }): Promise<Team[]> {
     const supabase = getSupabaseAdmin();
 
     let query = supabase
@@ -51,6 +51,9 @@ export const supabaseBackend: DataBackend = {
     }
     if (filter?.category) {
       query = query.eq('category', filter.category);
+    }
+    if (filter?.ownerCode) {
+      query = query.eq('owner_code', filter.ownerCode);
     }
 
     const { data, error } = await query;
@@ -90,6 +93,23 @@ export const supabaseBackend: DataBackend = {
     return data ?? [];
   },
 
+  async findTeamOwner(teamId: string): Promise<string | null> {
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase
+      .from('teams')
+      .select('owner_code')
+      .eq('id', teamId)
+      .maybeSingle();
+
+    if (error) {
+      throw new Error(`Gagal membaca pemilik tim: ${error.message}`);
+    }
+    if (!data) {
+      return null;
+    }
+    return data.owner_code ?? '';
+  },
+
   async findUsedTeamNumbers(prefix: string): Promise<Set<number>> {
     const supabase = getSupabaseAdmin();
     const { data, error } = await supabase
@@ -125,6 +145,7 @@ export const supabaseBackend: DataBackend = {
       category: fields.category,
       contact_person: fields.contactPerson ?? '',
       contact_phone: fields.contactPhone ?? '',
+      owner_code: fields.ownerCode ?? '',
       status: fields.status,
     };
 

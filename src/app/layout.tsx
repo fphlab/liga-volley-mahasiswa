@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from 'next/font/google';
 import './globals.css';
 import { ThemeProvider } from '@/components/ThemeProvider';
 import { AppModeProvider } from '@/components/AppModeContext';
+import { AuthProvider } from '@/components/AuthContext';
 import AppShell from '@/components/AppShell';
 
 const geistSans = Geist({
@@ -45,7 +46,9 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col selection:bg-pink-600 selection:text-white">
         <ThemeProvider>
           <AppModeProvider>
-            <AppShell>{children}</AppShell>
+            <AuthProvider>
+              <AppShell>{children}</AppShell>
+            </AuthProvider>
           </AppModeProvider>
         </ThemeProvider>
       </body>

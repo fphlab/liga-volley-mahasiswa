@@ -1,16 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { updateMember, getTeamById } from '@/lib/db';
-import { verifyAdminKey } from '@/lib/auth';
+import { getDataBackend } from '@/lib/backend';
+import { AuthError, requireActor } from '@/lib/auth';
 
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id: teamId } = await params;
-    const isAdmin = verifyAdminKey(request);
+    const actor = requireActor(request);
 
-    // Ambil data tim untuk cek status pendaftaran
+    if (actor.role === 'mojisport') {
+      throw new AuthError('Anda tidak memiliki izin untuk aksi ini.', 403);
+    }
+
+    const { id: teamId } = await params;
+
     const currentTeam = await getTeamById(teamId);
     if (!currentTeam) {
       return NextResponse.json(
@@ -19,17 +24,17 @@ export async function PUT(
       );
     }
 
-    // Sesuai sistem Google Form: jika tim sudah final (status !== 'Draft'),
-    // pendaftaran dikunci dan hanya Panitia dengan PIN yang boleh mengedit.
-    // Jika tim masih 'Draft' (tahap pendaftaran), pendaftar dapat mengisi dan menyimpan roster.
-    if (!isAdmin && currentTeam.status !== 'Draft') {
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'Akses ditolak: Susunan roster pemain telah dikunci (final). Perubahan data roster hanya dapat dilakukan oleh Panitia.',
-        },
-        { status: 401 }
-      );
+    if (actor.role === 'peserta') {
+      const backend = await getDataBackend();
+      const ownerCode = backend.findTeamOwner
+        ? await backend.findTeamOwner(teamId)
+        : currentTeam.ownerCode ?? '';
+      if (ownerCode === null || ownerCode === '' || ownerCode !== actor.ownerCode) {
+        throw new AuthError('Anda tidak memiliki izin untuk aksi ini.', 403);
+      }
+      if (currentTeam.status !== 'Draft') {
+        throw new AuthError('Roster tim ini sudah dikunci. Hubungi Panpel untuk perubahan.', 403);
+      }
     }
 
     const body = await request.json();
@@ -55,6 +60,9 @@ export async function PUT(
       team: updatedTeam,
     });
   } catch (error) {
+    if (error instanceof AuthError) {
+      return NextResponse.json({ success: false, error: error.message }, { status: error.status });
+    }
     console.error('Error updating member:', error);
     return NextResponse.json(
       {

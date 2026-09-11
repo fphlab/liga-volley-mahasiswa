@@ -12,16 +12,18 @@ import {
   GraduationCap, 
   Building, 
   User, 
-  RefreshCw,
-  Shield
+  RefreshCw
 } from 'lucide-react';
 import { Team, Member } from '@/lib/types';
 import { exportReport1ToExcel, exportReport2ToExcel, exportReport3ToExcel } from '@/lib/exportExcel';
+import { useAuth } from '@/components/AuthContext';
 import LvmLogo from '@/components/LvmLogo';
 
 type ReportTab = 'report1' | 'report2' | 'report3' | 'idcards';
 
 export default function ReportsPage() {
+  const { role, ownerCode } = useAuth();
+  const isPeserta = role === 'peserta';
   const [teams, setTeams] = useState<Team[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<ReportTab>('report1');
@@ -53,13 +55,21 @@ export default function ReportsPage() {
     fetchTeams();
   }, []);
 
+  // Peserta hanya boleh melihat tim sendiri. Scope di hulu agar seluruh
+  // memo turunan (report1/2/3, ID Card, Excel, PDF, search) ikut terscope.
+  const baseTeams = useMemo(() => {
+    if (!isPeserta) return teams;
+    if (!ownerCode) return [];
+    return teams.filter(t => t.ownerCode === ownerCode);
+  }, [teams, isPeserta, ownerCode]);
+
   // Hitungan tim berdasarkan status verifikasi
-  const verifiedCount = useMemo(() => teams.filter(t => t.status === 'Terverifikasi').length, [teams]);
-  const unverifiedCount = useMemo(() => teams.filter(t => t.status !== 'Terverifikasi').length, [teams]);
+  const verifiedCount = useMemo(() => baseTeams.filter(t => t.status === 'Terverifikasi').length, [baseTeams]);
+  const unverifiedCount = useMemo(() => baseTeams.filter(t => t.status !== 'Terverifikasi').length, [baseTeams]);
 
   // Tim yang memenuhi filter Region, Kategori, dan Status Verifikasi (pilihan opsi dropdown tim)
   const availableTeamsForSelect = useMemo(() => {
-    return teams.filter(t => {
+    return baseTeams.filter(t => {
       const matchesRegion = selectedRegion === 'ALL' || t.region === selectedRegion;
       const matchesCategory = selectedCategory === 'ALL' || t.category === selectedCategory;
       const matchesStatus =
@@ -67,24 +77,26 @@ export default function ReportsPage() {
         (selectedVerificationStatus === 'VERIFIED' ? t.status === 'Terverifikasi' : t.status !== 'Terverifikasi');
       return matchesRegion && matchesCategory && matchesStatus;
     });
-  }, [teams, selectedRegion, selectedCategory, selectedVerificationStatus]);
+  }, [baseTeams, selectedRegion, selectedCategory, selectedVerificationStatus]);
 
   // Tim yang lolos seluruh filter termasuk spesifik tim
+  // (peserta: abaikan pilihan tim lain, selalu tampilkan tim sendiri)
   const filteredTeams = useMemo(() => {
+    if (isPeserta) return availableTeamsForSelect;
     return availableTeamsForSelect.filter(t => {
       return selectedTeamId === 'ALL' || t.id === selectedTeamId;
     });
-  }, [availableTeamsForSelect, selectedTeamId]);
+  }, [availableTeamsForSelect, selectedTeamId, isPeserta]);
 
-  // Reset filter tim jika tim yang dipilih tidak ada di daftar opsi yang difilter
-  useEffect(() => {
-    if (selectedTeamId !== 'ALL') {
-      const exists = availableTeamsForSelect.some(t => t.id === selectedTeamId);
-      if (!exists) {
-        setSelectedTeamId('ALL');
-      }
+  // Reset filter tim saat daftar opsi berubah (pola render-time adjustment:
+  // effect tidak boleh memanggil setState sinkron di badannya).
+  const [prevAvailableTeams, setPrevAvailableTeams] = useState(availableTeamsForSelect);
+  if (prevAvailableTeams !== availableTeamsForSelect) {
+    setPrevAvailableTeams(availableTeamsForSelect);
+    if (selectedTeamId !== 'ALL' && !availableTeamsForSelect.some(t => t.id === selectedTeamId)) {
+      setSelectedTeamId('ALL');
     }
-  }, [availableTeamsForSelect, selectedTeamId]);
+  }
 
   // Report 1: Search within teams and members (players & officials)
   const report1Teams = useMemo(() => {
@@ -222,6 +234,10 @@ export default function ReportsPage() {
   }, [allFilteredMembers, idCardRoleFilter, searchTerm]);
 
   const handleExportExcel = async () => {
+    if (isPeserta) {
+      alert('Fitur ekspor Excel hanya tersedia untuk Panpel dan Mojisport.');
+      return;
+    }
     try {
       if (activeTab === 'report1') {
         const exportTeams = report1Teams.map(t => ({
@@ -275,6 +291,7 @@ export default function ReportsPage() {
             <RefreshCw className="w-3.5 h-3.5" />
           </button>
 
+          {!isPeserta && (
           <button
             onClick={handleExportExcel}
             className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm transition-all cursor-pointer"
@@ -282,6 +299,7 @@ export default function ReportsPage() {
             <Download className="w-3.5 h-3.5" />
             <span>Excel (.xlsx)</span>
           </button>
+          )}
 
           <button
             onClick={() => window.print()}
@@ -368,6 +386,7 @@ export default function ReportsPage() {
             )}
           </div>
 
+          {!isPeserta && (
           <select
             value={selectedRegion}
             onChange={e => setSelectedRegion(e.target.value)}
@@ -378,7 +397,9 @@ export default function ReportsPage() {
             <option value="Tengah">Tengah</option>
             <option value="Timur">Timur</option>
           </select>
+          )}
 
+          {!isPeserta && (
           <select
             value={selectedCategory}
             onChange={e => setSelectedCategory(e.target.value)}
@@ -388,18 +409,22 @@ export default function ReportsPage() {
             <option value="Putra">Putra</option>
             <option value="Putri">Putri</option>
           </select>
+          )}
 
           {/* Filter Status Verifikasi Panitia */}
+          {!isPeserta && (
           <select
             value={selectedVerificationStatus}
             onChange={e => setSelectedVerificationStatus(e.target.value as 'ALL' | 'VERIFIED' | 'UNVERIFIED')}
             className="py-1.5 px-2.5 rounded-xl bg-purple-50/50 dark:bg-[#1f0e3f] border border-purple-200/70 dark:border-purple-800/60 text-xs font-bold text-slate-800 dark:text-white focus:outline-none focus:border-pink-500"
           >
-            <option value="ALL">Semua Status Verifikasi ({teams.length})</option>
+            <option value="ALL">Semua Status Verifikasi ({baseTeams.length})</option>
             <option value="VERIFIED">✓ Terverifikasi Panitia ({verifiedCount})</option>
             <option value="UNVERIFIED">⏳ Belum Diverifikasi ({unverifiedCount})</option>
           </select>
+          )}
 
+          {!isPeserta && (
           <select
             value={selectedTeamId}
             onChange={e => setSelectedTeamId(e.target.value)}
@@ -412,6 +437,12 @@ export default function ReportsPage() {
               </option>
             ))}
           </select>
+          )}
+          {isPeserta && baseTeams.length === 1 && (
+            <span className="py-1.5 px-2.5 rounded-xl bg-purple-50/50 dark:bg-[#1f0e3f] border border-purple-200/70 dark:border-purple-800/60 text-xs font-bold text-slate-800 dark:text-white">
+              {baseTeams[0].name} ({baseTeams[0].category})
+            </span>
+          )}
         </div>
 
         <div className="text-[11px] text-slate-500 dark:text-purple-400/70 font-mono font-medium self-end sm:self-auto">

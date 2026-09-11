@@ -1,5 +1,17 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { SESSION_COOKIE, verifySessionToken } from '@/lib/session';
+
+const PUBLIC_API_PATHS = new Set([
+  '/api/auth/login',
+  '/api/auth/logout',
+  '/api/auth/session',
+  '/api/auth/verify',
+]);
+
+function isPublicPage(pathname: string): boolean {
+  return pathname === '/login' || pathname.startsWith('/login/') || pathname === '/production' || pathname.startsWith('/production/');
+}
 
 export function proxy(request: NextRequest) {
   const envConfig = process.env.NEXT_PUBLIC_PRODUCTION_MODE;
@@ -10,9 +22,28 @@ export function proxy(request: NextRequest) {
       ? envConfig === 'true'
       : process.env.NODE_ENV === 'production';
 
-  // In non-production or when holding mode is disabled, allow normal access
+  // In non-production or when holding mode is disabled, enforce the session gate
   if (!isHolding) {
-    return NextResponse.next();
+    const actor = verifySessionToken(request.cookies.get(SESSION_COOKIE)?.value);
+    if (actor) {
+      return NextResponse.next();
+    }
+    const { pathname } = request.nextUrl;
+    if (pathname.startsWith('/api/') || pathname === '/api') {
+      if (PUBLIC_API_PATHS.has(pathname)) {
+        return NextResponse.next();
+      }
+      return NextResponse.json(
+        { success: false, error: 'Autentikasi diperlukan.' },
+        { status: 401 }
+      );
+    }
+    if (isPublicPage(pathname)) {
+      return NextResponse.next();
+    }
+    return NextResponse.redirect(
+      new URL('/login?from=' + encodeURIComponent(pathname), request.url)
+    );
   }
 
   // Allow access if user has bypassed the holding display

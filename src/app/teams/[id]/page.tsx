@@ -9,26 +9,35 @@ import {
   Shirt,
   User,
   BadgeCheck,
-  Loader2,
-  Shield
+  Loader2
 } from 'lucide-react';
 import { Team } from '@/lib/types';
 import LvmLogo from '@/components/LvmLogo';
+import { useAuth } from '@/components/AuthContext';
 
 export default function TeamDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
   const teamId = resolvedParams.id;
 
+  const { role, ownerCode, logout } = useAuth();
   const [team, setTeam] = useState<Team | null>(null);
   const [loading, setLoading] = useState(true);
   const [verifying, setVerifying] = useState(false);
 
   const fetchTeam = useCallback(() => {
     return fetch(`/api/teams/${teamId}`)
-      .then(res => res.json())
+      .then(async res => {
+        if (res.status === 401) {
+          await logout();
+          return null;
+        }
+        return res.json();
+      })
       .then(data => {
-        if (data.success) {
+        if (data && data.success) {
           setTeam(data.team);
+        } else if (data && data.error) {
+          console.error(data.error);
         }
       })
       .catch(err => {
@@ -37,54 +46,20 @@ export default function TeamDetailPage({ params }: { params: Promise<{ id: strin
       .finally(() => {
         setLoading(false);
       });
-  }, [teamId]);
+  }, [teamId, logout]);
 
   useEffect(() => {
     fetchTeam();
   }, [fetchTeam]);
 
-  const getAdminKey = async (): Promise<string | null> => {
-    const saved = typeof window !== 'undefined' ? sessionStorage.getItem('lvm_admin_key') : null;
-    if (saved) {
-      try {
-        const check = await fetch('/api/auth/verify', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ pin: saved }),
-        });
-        const data = await check.json();
-        if (data.valid) return saved;
-      } catch {}
-      sessionStorage.removeItem('lvm_admin_key');
-    }
-
-    const input = prompt('Aksi ini memerlukan verifikasi Panitia. Masukkan PIN Panitia:');
-    if (!input || !input.trim()) return null;
-
-    try {
-      const res = await fetch('/api/auth/verify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pin: input.trim() }),
-      });
-      const data = await res.json();
-      if (data.valid) {
-        sessionStorage.setItem('lvm_admin_key', input.trim());
-        return input.trim();
-      } else {
-        sessionStorage.removeItem('lvm_admin_key');
-        alert(data.error || 'PIN Panitia salah! Akses ditolak.');
-        return null;
-      }
-    } catch {
-      alert('Gagal memverifikasi PIN Panitia.');
-      return null;
-    }
-  };
+  const canVerify = role === 'panpel';
+  const isOwner =
+    role === 'peserta' && !!team?.ownerCode && team.ownerCode === ownerCode;
+  const canOpenRoster = role === 'panpel' || isOwner;
 
   const handleVerifyTeam = async () => {
-    const adminKey = await getAdminKey();
-    if (!adminKey) {
+    if (role !== 'panpel') {
+      alert('Hanya Panpel yang dapat memverifikasi tim.');
       return;
     }
 
@@ -97,17 +72,17 @@ export default function TeamDetailPage({ params }: { params: Promise<{ id: strin
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          'x-admin-key': adminKey,
         },
         body: JSON.stringify({ status: 'Terverifikasi' }),
       });
+      if (res.status === 401) {
+        await logout();
+        return;
+      }
       const data = await res.json();
       if (data.success && data.team) {
         setTeam(data.team);
       } else {
-        if (res.status === 401) {
-          sessionStorage.removeItem('lvm_admin_key');
-        }
         alert(data.error || 'Gagal memverifikasi tim');
       }
     } catch (err) {
@@ -162,7 +137,7 @@ export default function TeamDetailPage({ params }: { params: Promise<{ id: strin
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
-          {team.status !== 'Terverifikasi' && filledCount === 20 && (
+          {canVerify && team.status !== 'Terverifikasi' && filledCount === 20 && (
             <button
               onClick={handleVerifyTeam}
               disabled={verifying}
@@ -189,13 +164,15 @@ export default function TeamDetailPage({ params }: { params: Promise<{ id: strin
             <Printer className="w-3.5 h-3.5 text-pink-500" />
             Cetak Lembar Tim (PDF)
           </button>
-          <Link
-            href={`/teams/${team.id}/roster`}
-            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider bg-pink-600 hover:bg-pink-500 text-white transition-all shadow-sm active:scale-95"
-          >
-            <Edit3 className="w-3.5 h-3.5" />
-            Edit 20 Personel
-          </Link>
+          {canOpenRoster && (
+            <Link
+              href={`/teams/${team.id}/roster`}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider bg-pink-600 hover:bg-pink-500 text-white transition-all shadow-sm active:scale-95"
+            >
+              <Edit3 className="w-3.5 h-3.5" />
+              Edit 20 Personel
+            </Link>
+          )}
         </div>
       </div>
 

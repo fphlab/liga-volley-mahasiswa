@@ -16,6 +16,7 @@ export type TeamRow = {
   category: Category;
   contact_person: string;
   contact_phone: string;
+  owner_code: string;
   status: Team['status'];
   created_at: string;
   updated_at: string;
@@ -83,6 +84,7 @@ export function mapTeamRow(row: TeamRowWithMembers): Team {
     category: row.category,
     contactPerson: row.contact_person ?? '',
     contactPhone: row.contact_phone ?? '',
+    ownerCode: row.owner_code ?? '',
     status: row.status,
     members,
     createdAt: row.created_at,

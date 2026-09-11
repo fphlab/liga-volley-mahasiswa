@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAllTeams, createTeam, getQuotaStats } from '@/lib/db';
+import { AuthError, requireActor } from '@/lib/auth';
 import { Region, Category } from '@/lib/types';
 
 export async function GET(request: NextRequest) {
   try {
+    requireActor(request);
+
     const { searchParams } = new URL(request.url);
     const region = (searchParams.get('region') as Region) || undefined;
     const category = (searchParams.get('category') as Category) || undefined;
@@ -17,6 +20,9 @@ export async function GET(request: NextRequest) {
       quota,
     });
   } catch (error) {
+    if (error instanceof AuthError) {
+      return NextResponse.json({ success: false, error: error.message }, { status: error.status });
+    }
     console.error('Error fetching teams:', error);
     return NextResponse.json(
       {
@@ -35,6 +41,8 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    requireActor(request, ['panpel']);
+
     const body = await request.json();
     const { name, address, province, region, category, contactPerson, contactPhone } = body;
 
@@ -61,6 +69,9 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true, team: result.team }, { status: 201 });
   } catch (error) {
+    if (error instanceof AuthError) {
+      return NextResponse.json({ success: false, error: error.message }, { status: error.status });
+    }
     console.error('Error creating team:', error);
     return NextResponse.json(
       {

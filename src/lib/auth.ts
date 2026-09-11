@@ -1,23 +1,38 @@
 import { NextRequest } from 'next/server';
+import type { AccessRole, Actor } from './accessCodes';
+import { SESSION_COOKIE, verifySessionToken } from './session';
 
-/**
- * Validasi otentikasi Panitia / Admin menggunakan Secret Key (PIN / API Key).
- * Mendukung pembacaan dari header 'x-admin-key' atau cookie 'lvm_admin_key'.
- */
-export function verifyAdminKey(request: NextRequest): boolean {
-  const adminSecret = process.env.ADMIN_SECRET_KEY || 'lvm2026_admin_secret_passcode';
-  
-  // 1. Cek header HTTP 'x-admin-key'
-  const headerKey = request.headers.get('x-admin-key');
-  if (headerKey && headerKey === adminSecret) {
-    return true;
+export type { AccessRole, Actor };
+
+export class AuthError extends Error {
+  status: 401 | 403;
+
+  constructor(message: string, status: 401 | 403) {
+    super(message);
+    this.name = 'AuthError';
+    this.status = status;
   }
+}
 
-  // 2. Cek cookie fallback 'lvm_admin_key'
-  const cookieKey = request.cookies.get('lvm_admin_key')?.value;
-  if (cookieKey && cookieKey === adminSecret) {
-    return true;
+export function getActorFromRequest(request: NextRequest): Actor | null {
+  const token = request.cookies.get(SESSION_COOKIE)?.value;
+  return verifySessionToken(token);
+}
+
+export function verifyActor(request: NextRequest, allowedRoles?: AccessRole[]): Actor | null {
+  const actor = getActorFromRequest(request);
+  if (!actor) return null;
+  if (allowedRoles && !allowedRoles.includes(actor.role)) return null;
+  return actor;
+}
+
+export function requireActor(request: NextRequest, allowedRoles?: AccessRole[]): Actor {
+  const actor = getActorFromRequest(request);
+  if (!actor) {
+    throw new AuthError('Autentikasi diperlukan.', 401);
   }
-
-  return false;
+  if (allowedRoles && !allowedRoles.includes(actor.role)) {
+    throw new AuthError('Anda tidak memiliki izin untuk aksi ini.', 403);
+  }
+  return actor;
 }

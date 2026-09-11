@@ -79,7 +79,7 @@ async function findMemberByIdImpl(teamId: string, memberId: string): Promise<Mem
 export const pgBackend: DataBackend = {
   name: 'postgres',
 
-  async fetchTeamsWithMembers(filter?: { region?: Region; category?: Category }): Promise<Team[]> {
+  async fetchTeamsWithMembers(filter?: { region?: Region; category?: Category; ownerCode?: string }): Promise<Team[]> {
     const clauses: string[] = [];
     const params: unknown[] = [];
 
@@ -90,6 +90,10 @@ export const pgBackend: DataBackend = {
     if (filter?.category) {
       params.push(filter.category);
       clauses.push(`category = $${params.length}`);
+    }
+    if (filter?.ownerCode) {
+      params.push(filter.ownerCode);
+      clauses.push(`owner_code = $${params.length}`);
     }
 
     const whereSql = clauses.length > 0 ? `WHERE ${clauses.join(' AND ')}` : '';
@@ -124,8 +128,18 @@ export const pgBackend: DataBackend = {
     return result.rows;
   },
 
-  async findUsedTeamNumbers(prefix: string): Promise<Set<number>> {
-    const result = await query<{ team_number: string }>(
+  async findTeamOwner(teamId: string): Promise<string | null> {
+    const result = await query<{ owner_code: string }>(
+      `SELECT owner_code FROM teams WHERE id = $1`,
+      [teamId]
+    );
+    if (result.rows.length === 0) {
+      return null;
+    }
+    return result.rows[0].owner_code ?? '';
+  },
+
+  async findUsedTeamNumbers(prefix: string): Promise<Set<number>> {    const result = await query<{ team_number: string }>(
       `SELECT team_number FROM teams WHERE team_number LIKE $1`,
       [`${prefix}%`]
     );
@@ -149,12 +163,13 @@ export const pgBackend: DataBackend = {
       const teamResult = await client.query<TeamRow>(
         `INSERT INTO teams
            (id, team_number, name, address, province, region, category,
-            contact_person, contact_phone, status)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+            contact_person, contact_phone, status, owner_code)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
          RETURNING *`,
         [
           t.id, t.teamNumber, t.name, t.address ?? '', t.province,
           t.region, t.category, t.contactPerson ?? '', t.contactPhone ?? '', t.status,
+          t.ownerCode ?? '',
         ]
       );
 
@@ -190,6 +205,7 @@ export const pgBackend: DataBackend = {
         category: row.category,
         contactPerson: row.contact_person ?? '',
         contactPhone: row.contact_phone ?? '',
+        ownerCode: row.owner_code ?? '',
         status: row.status,
         members: [...t.members].sort((a, b) => a.slotIndex - b.slotIndex),
         createdAt: row.created_at,

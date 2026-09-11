@@ -23,6 +23,15 @@ create table if not exists public.teams (
 
 create index if not exists teams_region_category_idx on public.teams (region, category);
 
+-- Migrasi idempotent: `create table if not exists` TIDAK menambah kolom pada DB
+-- existing, jadi ALTER di bawah aman dijalankan ulang. '' = tim belum punya pemilik.
+alter table public.teams add column if not exists owner_code text not null default '';
+
+-- Satu kode peserta hanya boleh terikat ke satu tim.
+create unique index if not exists teams_owner_code_unique
+  on public.teams (owner_code)
+  where owner_code <> '';
+
 -- ------------------------------------------------------------
 -- 2. TABEL PERSONEL / ANGGOTA TIM (20 slot per tim)
 -- ------------------------------------------------------------

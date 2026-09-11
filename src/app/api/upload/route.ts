@@ -5,10 +5,11 @@ import crypto from 'crypto';
 import { getSupabaseAdmin, isSupabaseConfigured } from '@/lib/supabaseServer';
 import { checkRateLimit, getClientIp } from '@/lib/rateLimit';
 import { deleteStorageFile, extractFilenameFromUrl, BUCKET_NAME } from '@/lib/storageService';
-import { verifyAdminKey } from '@/lib/auth';
+import { AuthError, getActorFromRequest, requireActor } from '@/lib/auth';
+import { getSessionSecret } from '@/lib/accessCodes';
 
 function generateDeleteToken(filename: string): string {
-  const secret = process.env.ADMIN_SECRET_KEY || 'lvm2026_upload_secret';
+  const secret = getSessionSecret();
   return crypto.createHmac('sha256', secret).update(filename).digest('hex');
 }
 
@@ -91,6 +92,11 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    const actor = requireActor(request);
+    if (actor.role === 'mojisport') {
+      throw new AuthError('Anda tidak memiliki izin untuk aksi ini.', 403);
+    }
+
     const formData = await request.formData();
     const file = formData.get('file');
 
@@ -195,6 +201,9 @@ export async function POST(request: NextRequest) {
       deleteToken: generateDeleteToken(filename),
     });
   } catch (error) {
+    if (error instanceof AuthError) {
+      return NextResponse.json({ success: false, error: error.message }, { status: error.status });
+    }
     console.error('Error uploading photo:', error);
     return NextResponse.json(
       { success: false, error: 'Gagal mengunggah foto' },
@@ -206,7 +215,7 @@ export async function POST(request: NextRequest) {
 /**
  * Endpoint DELETE untuk membersihkan file foto dari storage.
  * Dilindungi: hanya dapat dihapus jika membawa deleteToken valid (dari sesi upload pengguna)
- * atau dipanggil oleh Panitia (Admin Key). Mencegah Storage IDOR.
+ * atau dipanggil oleh Panitia (peran panpel). Mencegah Storage IDOR.
  */
 export async function DELETE(request: NextRequest) {
   try {
@@ -241,11 +250,11 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    // Otorisasi: Harus Panitia ATAU pemegang token delete yang sah dari sesi upload pengguna
-    const isAdmin = verifyAdminKey(request);
+    // Otorisasi: Panpel ATAU pemegang token delete yang sah dari sesi upload pengguna
+    const isPanpel = getActorFromRequest(request)?.role === 'panpel';
     const isTokenValid = deleteToken && verifyDeleteToken(filename, deleteToken);
 
-    if (!isAdmin && !isTokenValid) {
+    if (!isPanpel && !isTokenValid) {
       return NextResponse.json(
         {
           success: false,

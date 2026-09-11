@@ -33,10 +33,13 @@ export class BackendError extends Error {
 export interface DataBackend {
   readonly name: 'supabase' | 'postgres';
 
-  fetchTeamsWithMembers(filter?: { region?: Region; category?: Category }): Promise<Team[]>;
+  fetchTeamsWithMembers(filter?: { region?: Region; category?: Category; ownerCode?: string }): Promise<Team[]>;
   fetchTeamWithMembers(id: string): Promise<Team | null>;
   fetchRegionCategoryPairs(status?: 'Terverifikasi' | 'ALL'): Promise<Array<{ region: string; category: string }>>;
   findUsedTeamNumbers(prefix: string): Promise<Set<number>>;
+
+  /** owner_code tim, atau null bila tim tidak ditemukan */
+  findTeamOwner?(teamId: string): Promise<string | null>;
 
   /** Insert tim + seluruh personelnya secara atomik; throws BackendError */
   createTeamWithMembers(team: Team): Promise<Team>;

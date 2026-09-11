@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { seedInitialData } from '@/lib/seed';
-import { verifyAdminKey } from '@/lib/auth';
+import { AuthError, requireActor } from '@/lib/auth';
 
 export async function POST(request: NextRequest) {
   // 1. Blokir sepenuhnya di environment production
@@ -11,21 +11,19 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // 2. Wajibkan Secret Key / PIN Panitia bahkan di mode development
-  if (!verifyAdminKey(request)) {
-    return NextResponse.json(
-      { success: false, error: 'Akses ditolak: PIN / Secret Key Panitia diperlukan untuk menjalankan seeder.' },
-      { status: 401 }
-    );
-  }
-
   try {
+    // 2. Hanya peran panpel yang boleh menjalankan seeder, bahkan di development
+    requireActor(request, ['panpel']);
+
     const body = await request.json().catch(() => ({}));
     const force = body?.force === true;
 
     const result = await seedInitialData(force);
     return NextResponse.json(result);
   } catch (error) {
+    if (error instanceof AuthError) {
+      return NextResponse.json({ success: false, error: error.message }, { status: error.status });
+    }
     console.error('Error seeding data:', error);
     return NextResponse.json(
       { success: false, error: 'Gagal menjalankan seeder data' },
