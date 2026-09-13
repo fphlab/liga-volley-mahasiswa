@@ -11,7 +11,8 @@ import {
   Save,
   Shirt,
   Lock,
-  RotateCcw
+  RotateCcw,
+  Loader2
 } from 'lucide-react';
 import { Team, Member, TeamRole, PlayingPosition, PLAYING_POSITIONS } from '@/lib/types';
 import PhotoUpload from '@/components/PhotoUpload';
@@ -53,6 +54,7 @@ export default function TeamRosterPage({ params }: { params: Promise<{ id: strin
   const [loading, setLoading] = useState(true);
   const [selectedSlot, setSelectedSlot] = useState<number>(1);
   const [saving, setSaving] = useState(false);
+  const [isPhotoUploading, setIsPhotoUploading] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [hasSlotDraft, setHasSlotDraft] = useState<boolean>(false);
@@ -132,6 +134,10 @@ export default function TeamRosterPage({ params }: { params: Promise<{ id: strin
   }, [team, teamId]);
 
   const handleSelectSlot = (slotIdx: number) => {
+    if (isPhotoUploading) {
+      alert('Foto masih dalam proses unggah ke server. Mohon tunggu beberapa detik hingga selesai.');
+      return;
+    }
     switchSlot(slotIdx);
   };
 
@@ -187,6 +193,11 @@ export default function TeamRosterPage({ params }: { params: Promise<{ id: strin
     if (e) e.preventDefault();
     setErrorMessage(null);
     setSaveSuccess(false);
+
+    if (isPhotoUploading) {
+      setErrorMessage('Mohon tunggu sejenak, foto sedang diunggah ke server...');
+      return false;
+    }
 
     if (!team) return false;
     const currentMember = team.members.find(m => m.slotIndex === selectedSlot);
@@ -1009,6 +1020,7 @@ export default function TeamRosterPage({ params }: { params: Promise<{ id: strin
                     key={`photo-slot-${selectedSlot}`}
                     currentPhotoUrl={formData.photoUrl}
                     onPhotoUploaded={url => handleFormChange('photoUrl', url)}
+                    onUploadingChange={setIsPhotoUploading}
                     disabled={!isEditable}
                     label={isPlayerSlot ? 'Upload Photo dengan Jersey Voli' : 'Upload Foto Resmi Official'}
                     sublabel={isPlayerSlot ? 'Format JPG / PNG (Rasio 3:4 Direkomendasikan)' : 'Format JPG / PNG (Pakaian Rapi / Berkerah / ID Card)'}
@@ -1053,19 +1065,23 @@ export default function TeamRosterPage({ params }: { params: Promise<{ id: strin
                       <button
                         type="button"
                         onClick={() => handleSaveMember()}
-                        disabled={saving}
-                        className="flex-1 sm:flex-none px-4 py-2.5 rounded-xl font-bold text-xs bg-purple-50 hover:bg-purple-100 dark:bg-purple-950/60 dark:hover:bg-purple-900/60 text-purple-700 dark:text-purple-200 border border-purple-200 dark:border-purple-800 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                        disabled={saving || isPhotoUploading}
+                        className="flex-1 sm:flex-none px-4 py-2.5 rounded-xl font-bold text-xs bg-purple-50 hover:bg-purple-100 dark:bg-purple-950/60 dark:hover:bg-purple-900/60 text-purple-700 dark:text-purple-200 border border-purple-200 dark:border-purple-800 transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                       >
-                        <Save className="w-3.5 h-3.5 text-pink-500" />
-                        {saving ? 'Menyimpan...' : 'Simpan Slot Ini'}
+                        {saving || isPhotoUploading ? (
+                          <Loader2 className="w-3.5 h-3.5 text-pink-500 animate-spin" />
+                        ) : (
+                          <Save className="w-3.5 h-3.5 text-pink-500" />
+                        )}
+                        {isPhotoUploading ? 'Mengunggah Foto...' : saving ? 'Menyimpan...' : 'Simpan Slot Ini'}
                       </button>
 
                       {team.status === 'Draft' && isEditable && (
                         <button
                           type="button"
                           onClick={handleFinalizeSubmission}
-                          disabled={finalizing}
-                          className="flex-1 sm:flex-none px-3.5 py-2.5 rounded-xl font-bold text-xs bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/60 dark:hover:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                          disabled={finalizing || isPhotoUploading}
+                          className="flex-1 sm:flex-none px-3.5 py-2.5 rounded-xl font-bold text-xs bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/60 dark:hover:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                           title="Kunci dan finalisasi pendaftaran tim ini"
                         >
                           <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
@@ -1078,7 +1094,13 @@ export default function TeamRosterPage({ params }: { params: Promise<{ id: strin
                       {selectedSlot > 1 && (
                         <button
                           type="button"
-                          onClick={() => switchSlot(selectedSlot - 1)}
+                          onClick={() => {
+                            if (isPhotoUploading) {
+                              alert('Foto masih dalam proses unggah ke server. Mohon tunggu beberapa detik.');
+                              return;
+                            }
+                            switchSlot(selectedSlot - 1);
+                          }}
                           className="px-3.5 py-2.5 rounded-xl text-xs font-semibold bg-white dark:bg-[#1f0e3f] text-slate-700 dark:text-purple-200 border border-purple-200 dark:border-purple-800 hover:bg-purple-50 cursor-pointer"
                         >
                           ← Slot #{selectedSlot - 1}
@@ -1087,12 +1109,18 @@ export default function TeamRosterPage({ params }: { params: Promise<{ id: strin
 
                       <button
                         type="submit"
-                        disabled={saving}
-                        className="w-full sm:w-auto px-5 py-2.5 rounded-xl font-black text-xs uppercase tracking-wider bg-pink-600 hover:bg-pink-500 text-white shadow-md active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                        disabled={saving || isPhotoUploading}
+                        className="w-full sm:w-auto px-5 py-2.5 rounded-xl font-black text-xs uppercase tracking-wider bg-pink-600 hover:bg-pink-500 text-white shadow-md active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                       >
-                        <Save className="w-3.5 h-3.5 stroke-[2.5]" />
+                        {saving || isPhotoUploading ? (
+                          <Loader2 className="w-3.5 h-3.5 stroke-[2.5] animate-spin" />
+                        ) : (
+                          <Save className="w-3.5 h-3.5 stroke-[2.5]" />
+                        )}
                         <span>
-                          {selectedSlot < 20
+                          {isPhotoUploading
+                            ? 'Mengunggah Foto ke Server...'
+                            : selectedSlot < 20
                             ? `Simpan & Lanjut ke Slot #${selectedSlot + 1} →`
                             : team.status === 'Draft'
                             ? 'Simpan & Kunci Pendaftaran (Submit Final)'
