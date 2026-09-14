@@ -428,6 +428,7 @@ const MEMBER_PATCH_FIELDS: Partial<Record<keyof Member, string>> = {
   height: 'height',
   weight: 'weight',
   photoUrl: 'photo_url',
+  isVerified: 'is_verified',
 };
 
 export function updateMember(teamId: string, memberId: string, updates: Partial<Member>): Promise<{ success: boolean; member?: Member; error?: string }> {

@@ -624,7 +624,6 @@ export default function DashboardPage() {
                 <tbody className="divide-y divide-purple-50 dark:divide-purple-950/60">
                   {sortedTeams.map(team => {
                     const filledCount = team.members.filter(m => m.fullName && m.fullName.trim() !== '').length;
-                    const isComplete = filledCount === 20;
                     const boundAccount = isPanpel ? accountForTeam(team) : undefined;
 
                     return (
@@ -665,7 +664,11 @@ export default function DashboardPage() {
                             <div className="w-20 bg-purple-100 dark:bg-purple-950/60 h-2 rounded-full overflow-hidden">
                               <div
                                 className={`h-full rounded-full ${
-                                  isComplete ? 'bg-emerald-500' : 'bg-gradient-to-r from-pink-500 to-purple-500'
+                                  team.status === 'Terverifikasi'
+                                    ? 'bg-emerald-500'
+                                    : team.status === 'Lengkap'
+                                    ? 'bg-sky-500'
+                                    : 'bg-gradient-to-r from-pink-500 to-purple-500'
                                 }`}
                                 style={{ width: `${(filledCount / 20) * 100}%` }}
                               />
@@ -681,15 +684,15 @@ export default function DashboardPage() {
                               <BadgeCheck className="w-3.5 h-3.5 text-pink-500" />
                               Terverifikasi
                             </span>
-                          ) : isComplete ? (
-                            <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-400 dark:border-emerald-500/20">
+                          ) : team.status === 'Lengkap' ? (
+                            <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-sky-50 text-sky-700 border border-sky-200 dark:bg-sky-500/15 dark:text-sky-400 dark:border-sky-500/20">
                               <CheckCircle2 className="w-3.5 h-3.5" />
-                              Lengkap
+                              Lengkap ({filledCount} Personel)
                             </span>
                           ) : (
                             <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-pink-50 text-pink-700 border border-pink-200 dark:bg-pink-500/15 dark:text-pink-300 dark:border-pink-500/20">
                               <Clock className="w-3 h-3" />
-                              Draft ({20 - filledCount})
+                              Draft ({filledCount}/20 Terisi)
                             </span>
                           )}
                         </td>

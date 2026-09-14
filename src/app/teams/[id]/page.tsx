@@ -9,7 +9,8 @@ import {
   Shirt,
   User,
   BadgeCheck,
-  Loader2
+  Loader2,
+  RotateCcw
 } from 'lucide-react';
 import { Team } from '@/lib/types';
 import LvmLogo from '@/components/LvmLogo';
@@ -93,6 +94,42 @@ export default function TeamDetailPage({ params }: { params: Promise<{ id: strin
     }
   };
 
+  const handleUnverifyTeam = async () => {
+    if (role !== 'panpel') {
+      alert('Hanya Panpel yang dapat membatalkan verifikasi tim.');
+      return;
+    }
+
+    if (!confirm('[PANITIA] Batalkan status verifikasi tim ini? Status akan kembali menjadi "Lengkap" dan slot kuota regional dibuka kembali.')) {
+      return;
+    }
+    try {
+      setVerifying(true);
+      const res = await fetch(`/api/teams/${teamId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ status: 'Lengkap' }),
+      });
+      if (res.status === 401) {
+        await logout();
+        return;
+      }
+      const data = await res.json();
+      if (data.success && data.team) {
+        setTeam(data.team);
+      } else {
+        alert(data.error || 'Gagal membatalkan verifikasi tim');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Terjadi kesalahan saat membatalkan verifikasi tim');
+    } finally {
+      setVerifying(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="text-center py-20 text-slate-400">
@@ -118,7 +155,10 @@ export default function TeamDetailPage({ params }: { params: Promise<{ id: strin
 
   const players = team.members.filter(m => m.teamRole === 'Pemain');
   const officials = team.members.filter(m => m.teamRole !== 'Pemain');
+  const filledPlayers = players.filter(p => p.fullName && p.fullName.trim() !== '');
+  const filledOfficials = officials.filter(o => o.fullName && o.fullName.trim() !== '');
   const filledCount = team.members.filter(m => m.fullName && m.fullName.trim() !== '').length;
+  const playersFilledCount = filledPlayers.length;
 
   return (
     <div className="space-y-6 pb-20 max-w-7xl mx-auto">
@@ -137,18 +177,19 @@ export default function TeamDetailPage({ params }: { params: Promise<{ id: strin
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
-          {canVerify && team.status !== 'Terverifikasi' && filledCount === 20 && (
+          {canVerify && team.status !== 'Terverifikasi' && (
             <button
               onClick={handleVerifyTeam}
-              disabled={verifying}
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-white transition-all cursor-pointer shadow-sm"
+              disabled={verifying || playersFilledCount < 6}
+              title={playersFilledCount < 6 ? `Minimal 6 pemain terdaftar untuk memverifikasi tim (saat ini ${playersFilledCount})` : 'Verifikasi dan kunci slot kuota regional tim ini'}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed text-white transition-all cursor-pointer shadow-sm"
             >
               {verifying ? (
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
               ) : (
                 <BadgeCheck className="w-3.5 h-3.5" />
               )}
-              Verifikasi Tim (Kunci Slot)
+              Verifikasi Tim ({playersFilledCount} Pemain)
             </button>
           )}
           {team.status === 'Terverifikasi' && (
@@ -156,6 +197,17 @@ export default function TeamDetailPage({ params }: { params: Promise<{ id: strin
               <BadgeCheck className="w-4 h-4 text-pink-500" />
               Terverifikasi
             </span>
+          )}
+          {canVerify && team.status === 'Terverifikasi' && (
+            <button
+              onClick={handleUnverifyTeam}
+              disabled={verifying}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800 transition-all cursor-pointer shadow-xs"
+              title="Batalkan status verifikasi tim ini dan kembalikan ke status Lengkap"
+            >
+              {verifying ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RotateCcw className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />}
+              Batal Verifikasi
+            </button>
           )}
           <button
             onClick={() => window.print()}
@@ -237,10 +289,10 @@ export default function TeamDetailPage({ params }: { params: Promise<{ id: strin
         <div className="flex items-center justify-between pb-3 mb-3 border-b border-purple-50 dark:border-purple-950 print:border-gray-300">
           <h2 className="text-sm font-black text-slate-900 dark:text-white print:text-black uppercase tracking-tight flex items-center gap-2">
             <Shirt className="w-4 h-4 text-pink-500 print:text-black" />
-            Daftar 15 Pemain
+            Daftar Pemain
           </h2>
           <span className="text-xs font-mono font-bold text-pink-600 dark:text-pink-400 print:text-black">
-            {players.filter(p => p.fullName && p.fullName.trim() !== '').length} / 15 Pemain
+            {filledPlayers.length} / 15 Pemain
           </span>
         </div>
 
@@ -260,42 +312,50 @@ export default function TeamDetailPage({ params }: { params: Promise<{ id: strin
               </tr>
             </thead>
             <tbody className="divide-y divide-purple-50 dark:divide-purple-950/60 print:divide-gray-200">
-              {players.map((p, idx) => (
-                <tr key={p.id} className="hover:bg-purple-50/40 dark:hover:bg-purple-950/30">
-                  <td className="py-2.5 px-3 font-mono text-slate-500 dark:text-purple-400/60 print:text-gray-600">{idx + 1}</td>
-                  <td className="py-2.5 px-3">
-                    {p.photoUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={p.photoUrl} alt={p.fullName} className="w-8 h-10 object-cover rounded-md border border-purple-200 dark:border-purple-800" />
-                    ) : (
-                      <div className="w-8 h-10 rounded-md bg-purple-50 dark:bg-[#1f0e3f] flex items-center justify-center text-purple-400">
-                        <User className="w-4 h-4" />
-                      </div>
-                    )}
-                  </td>
-                  <td className="py-2.5 px-3 font-mono font-black text-pink-600 dark:text-pink-400 print:text-black text-xs">
-                    {p.jerseyNumber || '-'}
-                  </td>
-                  <td className="py-2.5 px-3 font-bold text-slate-900 dark:text-white print:text-black">
-                    {p.fullName || <span className="text-slate-400 dark:text-purple-400/40 italic">(Belum diisi)</span>}
-                  </td>
-                  <td className="py-2.5 px-3 text-slate-700 dark:text-purple-200 print:text-black font-semibold">
-                    {p.position || '-'}
-                  </td>
-                  <td className="py-2.5 px-3 text-slate-600 dark:text-purple-300 print:text-black font-mono">
-                    {p.height ? `${p.height}cm` : '-'} / {p.weight ? `${p.weight}kg` : '-'}
-                  </td>
-                  <td className="py-2.5 px-3 font-mono text-slate-600 dark:text-purple-400/70 print:text-black">
-                    {p.nim || '-'}
-                  </td>
-                  <td className="py-2.5 px-3 text-slate-700 dark:text-purple-200 print:text-black">
-                    {p.faculty || '-'} {p.major ? `(${p.major})` : ''}
-                  </td>
-                  <td className="py-2.5 px-3 font-mono text-slate-600 dark:text-purple-400/70 print:text-black">
-                    {p.entryYear || '-'}
+              {filledPlayers.length === 0 ? (
+                <tr>
+                  <td colSpan={9} className="py-4 text-center text-slate-400 dark:text-purple-400/60 italic">
+                    Belum ada data pemain yang diisi
                   </td>
                 </tr>
-              ))}
+              ) : (
+                filledPlayers.map((p, idx) => (
+                  <tr key={p.id} className="hover:bg-purple-50/40 dark:hover:bg-purple-950/30">
+                    <td className="py-2.5 px-3 font-mono text-slate-500 dark:text-purple-400/60 print:text-gray-600">{idx + 1}</td>
+                    <td className="py-2.5 px-3">
+                      {p.photoUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={p.photoUrl} alt={p.fullName} className="w-8 h-10 object-cover rounded-md border border-purple-200 dark:border-purple-800" />
+                      ) : (
+                        <div className="w-8 h-10 rounded-md bg-purple-50 dark:bg-[#1f0e3f] flex items-center justify-center text-purple-400">
+                          <User className="w-4 h-4" />
+                        </div>
+                      )}
+                    </td>
+                    <td className="py-2.5 px-3 font-mono font-black text-pink-600 dark:text-pink-400 print:text-black text-xs">
+                      {p.jerseyNumber || '-'}
+                    </td>
+                    <td className="py-2.5 px-3 font-bold text-slate-900 dark:text-white print:text-black">
+                      {p.fullName}
+                    </td>
+                    <td className="py-2.5 px-3 text-slate-700 dark:text-purple-200 print:text-black font-semibold">
+                      {p.position || '-'}
+                    </td>
+                    <td className="py-2.5 px-3 text-slate-600 dark:text-purple-300 print:text-black font-mono">
+                      {p.height ? `${p.height}cm` : '-'} / {p.weight ? `${p.weight}kg` : '-'}
+                    </td>
+                    <td className="py-2.5 px-3 font-mono text-slate-600 dark:text-purple-400/70 print:text-black">
+                      {p.nim || '-'}
+                    </td>
+                    <td className="py-2.5 px-3 text-slate-700 dark:text-purple-200 print:text-black">
+                      {p.faculty || '-'} {p.major ? `(${p.major})` : ''}
+                    </td>
+                    <td className="py-2.5 px-3 font-mono text-slate-600 dark:text-purple-400/70 print:text-black">
+                      {p.entryYear || '-'}
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
@@ -306,10 +366,10 @@ export default function TeamDetailPage({ params }: { params: Promise<{ id: strin
         <div className="flex items-center justify-between pb-3 mb-3 border-b border-purple-50 dark:border-purple-950 print:border-gray-300">
           <h2 className="text-sm font-black text-slate-900 dark:text-white print:text-black uppercase tracking-tight flex items-center gap-2">
             <Users className="w-4 h-4 text-pink-500 print:text-black" />
-            Daftar 5 Official Tim
+            Daftar Official Tim
           </h2>
           <span className="text-xs font-mono font-bold text-pink-600 dark:text-pink-400 print:text-black">
-            {officials.filter(o => o.fullName && o.fullName.trim() !== '').length} / 5 Official
+            {filledOfficials.length} / 5 Official
           </span>
         </div>
 
@@ -325,23 +385,31 @@ export default function TeamDetailPage({ params }: { params: Promise<{ id: strin
               </tr>
             </thead>
             <tbody className="divide-y divide-purple-50 dark:divide-purple-950/60 print:divide-gray-200">
-              {officials.map((o, idx) => (
-                <tr key={o.id} className="hover:bg-purple-50/40 dark:hover:bg-purple-950/30">
-                  <td className="py-2.5 px-3 font-mono text-slate-500 dark:text-purple-400/60 print:text-gray-600">{idx + 16}</td>
-                  <td className="py-2.5 px-3 font-black text-purple-700 dark:text-pink-400 print:text-black">
-                    {o.teamRole}
-                  </td>
-                  <td className="py-2.5 px-3 font-bold text-slate-900 dark:text-white print:text-black">
-                    {o.fullName || <span className="text-slate-400 dark:text-purple-400/40 italic">(Belum diisi)</span>}
-                  </td>
-                  <td className="py-2.5 px-3 font-mono text-slate-600 dark:text-purple-400/70 print:text-black">
-                    {o.regNumber}
-                  </td>
-                  <td className="py-2.5 px-3 text-slate-600 dark:text-purple-300/80 print:text-black">
-                    Official Staff
+              {filledOfficials.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="py-4 text-center text-slate-400 dark:text-purple-400/60 italic">
+                    Belum ada data official yang diisi
                   </td>
                 </tr>
-              ))}
+              ) : (
+                filledOfficials.map((o, idx) => (
+                  <tr key={o.id} className="hover:bg-purple-50/40 dark:hover:bg-purple-950/30">
+                    <td className="py-2.5 px-3 font-mono text-slate-500 dark:text-purple-400/60 print:text-gray-600">{idx + 1}</td>
+                    <td className="py-2.5 px-3 font-black text-purple-700 dark:text-pink-400 print:text-black">
+                      {o.teamRole}
+                    </td>
+                    <td className="py-2.5 px-3 font-bold text-slate-900 dark:text-white print:text-black">
+                      {o.fullName}
+                    </td>
+                    <td className="py-2.5 px-3 font-mono text-slate-600 dark:text-purple-400/70 print:text-black">
+                      {o.regNumber}
+                    </td>
+                    <td className="py-2.5 px-3 text-slate-600 dark:text-purple-300/80 print:text-black">
+                      Official Staff
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>

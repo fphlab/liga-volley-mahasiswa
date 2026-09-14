@@ -52,12 +52,15 @@ create table if not exists public.members (
   height       integer check (height is null or height between 100 and 250),
   weight       integer check (weight is null or weight between 20 and 200),
   photo_url    text not null default '',
+  is_verified  boolean not null default false,
   created_at   timestamptz not null default now(),
   updated_at   timestamptz not null default now(),
 
   -- Satu orang per slot dalam satu tim (FR-02.1)
   constraint members_unique_slot_per_team unique (team_id, slot_index)
 );
+
+alter table public.members add column if not exists is_verified boolean not null default false;
 
 create index if not exists members_team_id_idx on public.members (team_id);
 create index if not exists members_full_name_idx on public.members (full_name) where full_name <> '';

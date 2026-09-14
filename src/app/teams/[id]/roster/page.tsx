@@ -299,10 +299,17 @@ export default function TeamRosterPage({ params }: { params: Promise<{ id: strin
     await handleSaveMember();
 
     const filledCount = team.members.filter(m => m.fullName && m.fullName.trim() !== '').length;
+    const playersFilledCount = team.members.filter(m => m.teamRole === 'Pemain' && m.fullName && m.fullName.trim() !== '').length;
+
+    if (playersFilledCount < 6) {
+      alert(`Perhatian: Minimal 6 pemain harus terdaftar sebelum menyelesaikan pendaftaran tim (sesuai regulasi pertandingan voli). Saat ini baru ${playersFilledCount} pemain yang terisi.`);
+      return;
+    }
+
     const confirmMsg =
       filledCount < 20
-        ? `Perhatian: Anda baru mengisi ${filledCount} dari 20 personel.\n\nApakah Anda yakin ingin mengunci dan menyelesaikan pendaftaran sekarang? Data yang sudah disubmit bersifat final dan terkunci (tidak dapat diubah kembali).`
-        : 'Konfirmasi Finalisasi Pendaftaran:\n\nApakah seluruh data tim dan 20 personel sudah benar? Setelah disubmit, data akan resmi terkunci (Read-Only) dan tidak dapat diubah lagi secara mandiri.';
+        ? `Konfirmasi Finalisasi Roster (${playersFilledCount} Pemain, ${filledCount - playersFilledCount} Official):\n\nAnda mendaftarkan ${filledCount} dari kuota maksimal 20 personel.\n\nApakah Anda yakin ingin mengunci dan menyelesaikan pendaftaran sekarang? Data yang sudah disubmit bersifat final dan siap diverifikasi oleh Panpel.`
+        : 'Konfirmasi Finalisasi Pendaftaran:\n\nApakah seluruh data tim dan 20 personel sudah benar? Setelah disubmit, data akan resmi terkunci (Read-Only) dan siap diverifikasi oleh Panpel.';
 
     if (!window.confirm(confirmMsg)) {
       return;

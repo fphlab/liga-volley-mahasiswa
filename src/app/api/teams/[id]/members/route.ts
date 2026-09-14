@@ -47,6 +47,11 @@ export async function PUT(
       );
     }
 
+    // Keamanan: Hanya Panpel yang berhak mengubah status verifikasi personel (isVerified)
+    if (actor.role !== 'panpel' && 'isVerified' in updates) {
+      delete updates.isVerified;
+    }
+
     const result = await updateMember(teamId, memberId, updates);
     if (!result.success) {
       return NextResponse.json({ success: false, error: result.error }, { status: 400 });

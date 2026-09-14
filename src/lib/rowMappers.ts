@@ -39,6 +39,7 @@ export type MemberRow = {
   height: number | null;
   weight: number | null;
   photo_url: string;
+  is_verified?: boolean | null;
   created_at: string;
   updated_at: string;
 };
@@ -64,6 +65,7 @@ export function mapMemberRow(row: MemberRow): Member {
     height: row.height ?? undefined,
     weight: row.weight ?? undefined,
     photoUrl: row.photo_url ?? '',
+    isVerified: Boolean(row.is_verified),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };

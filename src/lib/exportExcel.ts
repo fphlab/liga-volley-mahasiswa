@@ -59,16 +59,16 @@ export async function exportReport1ToExcel(teams: Team[], filename = 'Report_1_R
   const rows: ReportRow[] = [];
 
   teams.forEach(team => {
-    const players = team.members.filter(m => m.teamRole === 'Pemain');
+    const players = team.members.filter(m => m.teamRole === 'Pemain' && m.fullName && m.fullName.trim() !== '');
     players.forEach(p => {
       rows.push({
         'Nama Tim': team.name,
         'Regional': team.region,
         'Kategori': team.category,
-        'Status Verifikasi': team.status,
+        'Status Tim': team.status,
         'No Urut Daftar': p.regNumber || '-',
         'No Jersey': p.jerseyNumber || '-',
-        'Nama Pemain': p.fullName || '(Belum diisi)',
+        'Nama Pemain': p.fullName,
         'Posisi Bermain': p.position || '-',
         'Tinggi Badan (cm)': p.height || '-',
         'Berat Badan (kg)': p.weight || '-',
@@ -90,15 +90,16 @@ export async function exportReport2ToExcel(teams: Team[], filename = 'Report_2_V
 
   teams.forEach(team => {
     team.members
-      .filter(m => m.teamRole === 'Pemain')
+      .filter(m => m.teamRole === 'Pemain' && m.fullName && m.fullName.trim() !== '')
       .forEach(m => {
         rows.push({
           'No Urut Daftar': m.regNumber || '-',
-          'Nama Pemain (Mahasiswa)': m.fullName || '(Belum diisi)',
+          'Nama Pemain (Mahasiswa)': m.fullName,
           'Nama Tim': team.name,
           'Regional': team.region,
           'Kategori': team.category,
-          'Status Verifikasi': team.status,
+          'Verifikasi Mahasiswa': m.isVerified ? 'Terverifikasi (Lolos PDDikti)' : 'Belum Diverifikasi',
+          'Status Tim': team.status,
           'Posisi Bermain': m.position || 'Pemain',
           'Nomor Induk Mahasiswa (NIM)': m.nim || '-',
           'Fakultas': m.faculty || '-',

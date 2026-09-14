@@ -33,6 +33,7 @@ export interface Member {
   height?: number; // cm
   weight?: number; // kg
   photoUrl?: string; // path to photo
+  isVerified?: boolean; // status verifikasi personel oleh panpel
   createdAt: string;
   updatedAt: string;
 }

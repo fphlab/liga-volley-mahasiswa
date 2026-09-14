@@ -12,7 +12,9 @@ import {
   GraduationCap, 
   Building, 
   User, 
-  RefreshCw
+  RefreshCw,
+  Loader2,
+  RotateCcw
 } from 'lucide-react';
 import { Team, Member } from '@/lib/types';
 import { exportReport1ToExcel, exportReport2ToExcel, exportReport3ToExcel } from '@/lib/exportExcel';
@@ -23,6 +25,7 @@ type ReportTab = 'report1' | 'report2' | 'report3' | 'idcards';
 
 export default function ReportsPage() {
   const { role, ownerCode } = useAuth();
+  const isPanpel = role === 'panpel';
   const isPeserta = role === 'peserta';
   const [teams, setTeams] = useState<Team[]>([]);
   const [loading, setLoading] = useState(true);
@@ -34,6 +37,10 @@ export default function ReportsPage() {
   const [selectedVerificationStatus, setSelectedVerificationStatus] = useState<'ALL' | 'VERIFIED' | 'UNVERIFIED'>('ALL');
   const [selectedTeamId, setSelectedTeamId] = useState<string>('ALL');
   const [searchTerm, setSearchTerm] = useState('');
+
+  // Action states
+  const [verifyingMemberId, setVerifyingMemberId] = useState<string | null>(null);
+  const [updatingTeamId, setUpdatingTeamId] = useState<string | null>(null);
 
   const fetchTeams = () => {
     return fetch('/api/teams')
@@ -49,6 +56,96 @@ export default function ReportsPage() {
       .finally(() => {
         setLoading(false);
       });
+  };
+
+  const handleToggleMemberVerification = async (teamId: string, memberId: string, currentVerified: boolean) => {
+    if (!isPanpel) return;
+    const nextStatus = !currentVerified;
+    try {
+      setVerifyingMemberId(memberId);
+      // Optimistic update
+      setTeams(prevTeams =>
+        prevTeams.map(t => {
+          if (t.id !== teamId) return t;
+          return {
+            ...t,
+            members: t.members.map(m => (m.id === memberId ? { ...m, isVerified: nextStatus } : m)),
+          };
+        })
+      );
+
+      const res = await fetch(`/api/teams/${teamId}/members`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          memberId,
+          updates: { isVerified: nextStatus },
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Gagal mengubah status verifikasi atlet');
+      }
+    } catch (err) {
+      console.error(err);
+      alert(err instanceof Error ? err.message : 'Gagal memperbarui verifikasi atlet');
+      fetchTeams();
+    } finally {
+      setVerifyingMemberId(null);
+    }
+  };
+
+  const handleQuickVerifyTeam = async (teamId: string, teamName: string) => {
+    if (!isPanpel) return;
+    if (!confirm(`[PANITIA] Verifikasi tim "${teamName}"? Status akan menjadi Terverifikasi dan resmi mengunci slot kuota regional.`)) {
+      return;
+    }
+    try {
+      setUpdatingTeamId(teamId);
+      const res = await fetch(`/api/teams/${teamId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'Terverifikasi' }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        fetchTeams();
+      } else {
+        alert(data.error || 'Gagal memverifikasi tim');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Terjadi kesalahan saat memverifikasi tim');
+    } finally {
+      setUpdatingTeamId(null);
+    }
+  };
+
+  const handleQuickUnverifyTeam = async (teamId: string, teamName: string) => {
+    if (!isPanpel) return;
+    if (!confirm(`[PANITIA] Batalkan status verifikasi tim "${teamName}"? Status akan kembali menjadi "Lengkap" dan slot kuota regional dibuka kembali.`)) {
+      return;
+    }
+    try {
+      setUpdatingTeamId(teamId);
+      const res = await fetch(`/api/teams/${teamId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'Lengkap' }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        fetchTeams();
+      } else {
+        alert(data.error || 'Gagal membatalkan verifikasi tim');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Terjadi kesalahan saat membatalkan verifikasi tim');
+    } finally {
+      setUpdatingTeamId(null);
+    }
   };
 
   useEffect(() => {
@@ -104,8 +201,8 @@ export default function ReportsPage() {
     if (!query) {
       return filteredTeams.map(team => ({
         ...team,
-        displayPlayers: team.members.filter(m => m.teamRole === 'Pemain'),
-        officials: team.members.filter(m => m.teamRole !== 'Pemain'),
+        displayPlayers: team.members.filter(m => m.teamRole === 'Pemain' && (m.fullName || '').trim() !== ''),
+        officials: team.members.filter(m => m.teamRole !== 'Pemain' && (m.fullName || '').trim() !== ''),
       }));
     }
 
@@ -116,8 +213,8 @@ export default function ReportsPage() {
           team.teamNumber.toLowerCase().includes(query) ||
           team.province.toLowerCase().includes(query);
 
-        const teamPlayers = team.members.filter(m => m.teamRole === 'Pemain');
-        const teamOfficials = team.members.filter(m => m.teamRole !== 'Pemain');
+        const teamPlayers = team.members.filter(m => m.teamRole === 'Pemain' && (m.fullName || '').trim() !== '');
+        const teamOfficials = team.members.filter(m => m.teamRole !== 'Pemain' && (m.fullName || '').trim() !== '');
 
         const matchingPlayers = teamPlayers.filter(player => {
           return (
@@ -181,7 +278,9 @@ export default function ReportsPage() {
     const list: Array<{ team: Team; member: Member }> = [];
     filteredTeams.forEach(team => {
       team.members.forEach(member => {
-        list.push({ team, member });
+        if ((member.fullName || '').trim() !== '') {
+          list.push({ team, member });
+        }
       });
     });
     return list;
@@ -558,8 +657,16 @@ export default function ReportsPage() {
                           </p>
                         </div>
 
-                        <div className="text-[11px] text-slate-600 dark:text-purple-300 print:text-gray-700">
-                          Manager: <strong className="text-slate-900 dark:text-white print:text-black">{teamOfficials.find(o => o.teamRole === 'Team Manager')?.fullName || '-'}</strong> | Pelatih: <strong className="text-slate-900 dark:text-white print:text-black">{teamOfficials.find(o => o.teamRole === 'Head Coach')?.fullName || '-'}</strong>
+                        <div className="text-[11px] text-slate-600 dark:text-purple-300 print:text-gray-700 flex items-center gap-1.5 flex-wrap">
+                          <span>Manager: <strong className="text-slate-900 dark:text-white print:text-black">{teamOfficials.find(o => o.teamRole === 'Team Manager')?.fullName || '-'}</strong></span>
+                          <span>|</span>
+                          <span>Pelatih: <strong className="text-slate-900 dark:text-white print:text-black">{teamOfficials.find(o => o.teamRole === 'Head Coach')?.fullName || '-'}</strong></span>
+                          {teamOfficials.filter(o => o.teamRole !== 'Team Manager' && o.teamRole !== 'Head Coach').length > 0 && (
+                            <>
+                              <span>|</span>
+                              <span>Staff: <strong className="text-slate-900 dark:text-white print:text-black">{teamOfficials.filter(o => o.teamRole !== 'Team Manager' && o.teamRole !== 'Head Coach').map(o => o.fullName).join(', ')}</strong></span>
+                            </>
+                          )}
                         </div>
                       </div>
 
@@ -581,17 +688,17 @@ export default function ReportsPage() {
                             {teamPlayers.length === 0 ? (
                               <tr>
                                 <td colSpan={7} className="py-4 text-center text-slate-400 dark:text-purple-400/60 italic">
-                                  Tidak ada pemain yang sesuai pada tim ini
+                                  Tidak ada pemain terdaftar yang sesuai pada tim ini
                                 </td>
                               </tr>
                             ) : (
-                              teamPlayers.map((player, idx) => (
+                              teamPlayers.map((player) => (
                                 <tr key={player.id} className="hover:bg-purple-50/40 dark:hover:bg-purple-950/30">
                                   <td className="py-2.5 px-3 font-mono font-black text-pink-600 dark:text-pink-400 print:text-black text-xs">
                                     {player.jerseyNumber || '-'}
                                   </td>
                                   <td className="py-2.5 px-3 font-bold text-slate-900 dark:text-white print:text-black">
-                                    {player.fullName || <span className="text-slate-400 dark:text-purple-400/40 italic">(Slot #{idx + 1} Kosong)</span>}
+                                    {player.fullName}
                                   </td>
                                   <td className="py-2.5 px-3 text-slate-700 dark:text-purple-200 print:text-black font-semibold">
                                     {player.position || '-'}
@@ -638,9 +745,15 @@ export default function ReportsPage() {
                     Khusus verifikasi keabsahan status mahasiswa aktif (Pemain/Atlet) dari masing-masing perguruan tinggi (PDDikti)
                   </p>
                 </div>
-                <span className="text-xs font-mono font-black text-pink-600 dark:text-pink-400 print:text-black shrink-0">
-                  Total {searchedReport2Members.length} Mahasiswa (Pemain)
-                </span>
+                <div className="flex items-center gap-2 flex-wrap text-xs font-mono font-black shrink-0">
+                  <span className="text-pink-600 dark:text-pink-400 print:text-black">
+                    Total {searchedReport2Members.length} Pemain
+                  </span>
+                  <span className="text-slate-300 dark:text-purple-800">•</span>
+                  <span className="text-emerald-600 dark:text-emerald-400 print:text-black">
+                    {searchedReport2Members.filter(m => m.member.isVerified).length} Terverifikasi
+                  </span>
+                </div>
               </div>
 
               <div className="overflow-x-auto">
@@ -650,7 +763,7 @@ export default function ReportsPage() {
                       <th className="py-2.5 px-3">NO. URUT DAFTAR</th>
                       <th className="py-2.5 px-3">NAMA PEMAIN (MAHASISWA)</th>
                       <th className="py-2.5 px-3">TIM / KAMPUS</th>
-                      <th className="py-2.5 px-3">STATUS VERIFIKASI</th>
+                      <th className="py-2.5 px-3">VERIFIKASI MAHASISWA</th>
                       <th className="py-2.5 px-3">NIM</th>
                       <th className="py-2.5 px-3">FAKULTAS</th>
                       <th className="py-2.5 px-3">JURUSAN</th>
@@ -671,20 +784,41 @@ export default function ReportsPage() {
                             {member.regNumber || '-'}
                           </td>
                           <td className="py-2.5 px-3 font-bold text-slate-900 dark:text-white print:text-black">
-                            {member.fullName || <span className="text-slate-400 dark:text-purple-400/40 italic">(Belum diisi)</span>}
+                            {member.fullName}
                           </td>
                           <td className="py-2.5 px-3 text-slate-700 dark:text-purple-200 print:text-black font-medium">
                             {team.name}
                           </td>
                           <td className="py-2.5 px-3">
-                            {team.status === 'Terverifikasi' ? (
+                            {isPanpel ? (
+                              <button
+                                type="button"
+                                disabled={verifyingMemberId === member.id}
+                                onClick={() => handleToggleMemberVerification(team.id, member.id, Boolean(member.isVerified))}
+                                className={`inline-flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-1 rounded-lg border transition-all cursor-pointer shadow-xs print:border-none ${
+                                  member.isVerified
+                                    ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-300 dark:bg-emerald-500/20 dark:text-emerald-300 dark:border-emerald-500/40'
+                                    : 'bg-slate-50 hover:bg-purple-50 text-slate-600 hover:text-purple-700 border-slate-300 dark:bg-[#1f0e3f] dark:text-purple-300 dark:border-purple-800'
+                                }`}
+                                title={member.isVerified ? 'Klik untuk membatalkan verifikasi' : 'Klik untuk menandai atlet lolos verifikasi PDDikti'}
+                              >
+                                {verifyingMemberId === member.id ? (
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin text-pink-500" />
+                                ) : member.isVerified ? (
+                                  <BadgeCheck className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                                ) : (
+                                  <span className="w-3.5 h-3.5 rounded border border-slate-400 dark:border-purple-400 inline-block shrink-0" />
+                                )}
+                                <span>{member.isVerified ? 'Lolos PDDikti' : 'Ceklis Verifikasi'}</span>
+                              </button>
+                            ) : member.isVerified ? (
                               <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60 print:text-black">
                                 <BadgeCheck className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
-                                Terverifikasi
+                                Lolos PDDikti
                               </span>
                             ) : (
                               <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300 border border-amber-200 dark:border-amber-800/60 print:text-black">
-                                Belum ({team.status})
+                                Belum Verifikasi
                               </span>
                             )}
                           </td>
@@ -735,21 +869,25 @@ export default function ReportsPage() {
                       <th className="py-2.5 px-3">ASAL PROPINSI</th>
                       <th className="py-2.5 px-3">REGIONAL</th>
                       <th className="py-2.5 px-3">KATEGORI</th>
-                      <th className="py-2.5 px-3">KELENGKAPAN (20)</th>
+                      <th className="py-2.5 px-3">KOMPOSISI ROSTER</th>
                       <th className="py-2.5 px-3">STATUS ROSTER</th>
+                      {isPanpel && (
+                        <th className="py-2.5 px-3 print:hidden">AKSI PERSETUJUAN (PANPEL)</th>
+                      )}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-purple-50 dark:divide-purple-950/60 print:divide-gray-200">
                     {report3Teams.length === 0 ? (
                       <tr>
-                        <td colSpan={7} className="py-8 text-center text-slate-400 dark:text-purple-400/60 text-xs italic">
+                        <td colSpan={isPanpel ? 8 : 7} className="py-8 text-center text-slate-400 dark:text-purple-400/60 text-xs italic">
                           Tidak ada tim yang sesuai dengan pencarian &ldquo;{searchTerm}&rdquo;
                         </td>
                       </tr>
                     ) : (
                       report3Teams.map(team => {
                         const filledMembers = team.members.filter(m => m.fullName && m.fullName.trim() !== '').length;
-                        const isComplete = filledMembers === 20;
+                        const playersCount = team.members.filter(m => m.teamRole === 'Pemain' && m.fullName && m.fullName.trim() !== '').length;
+                        const officialsCount = team.members.filter(m => m.teamRole !== 'Pemain' && m.fullName && m.fullName.trim() !== '').length;
 
                         return (
                           <tr key={team.id} className="hover:bg-purple-50/40 dark:hover:bg-purple-950/30">
@@ -776,26 +914,64 @@ export default function ReportsPage() {
                                 {team.category}
                               </span>
                             </td>
-                            <td className="py-2.5 px-3 font-mono font-bold text-slate-700 dark:text-purple-200 print:text-black">
-                              {filledMembers} / 20
+                            <td className="py-2.5 px-3 font-mono text-slate-700 dark:text-purple-200 print:text-black">
+                              <span className="font-bold">{filledMembers} Personel</span>
+                              <span className="text-[10px] text-slate-400 dark:text-purple-400/60 block font-normal">
+                                ({playersCount} Pemain, {officialsCount} Official)
+                              </span>
                             </td>
                             <td className="py-2.5 px-3">
                               {team.status === 'Terverifikasi' ? (
-                                <span className="inline-flex items-center gap-1 text-purple-700 dark:text-purple-300 print:text-black font-bold">
-                                  <BadgeCheck className="w-3.5 h-3.5 text-pink-500" />
+                                <span className="inline-flex items-center gap-1 text-emerald-700 dark:text-emerald-300 print:text-black font-bold">
+                                  <BadgeCheck className="w-3.5 h-3.5 text-emerald-500" />
                                   Terverifikasi
                                 </span>
-                              ) : isComplete ? (
-                                <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 print:text-black font-bold">
-                                  <CheckCircle2 className="w-3.5 h-3.5" />
-                                  Lengkap
+                              ) : team.status === 'Lengkap' ? (
+                                <span className="inline-flex items-center gap-1 text-sky-700 dark:text-sky-300 print:text-black font-bold">
+                                  <CheckCircle2 className="w-3.5 h-3.5 text-sky-500" />
+                                  Lengkap ({filledMembers} Personel)
                                 </span>
                               ) : (
-                                <span className="text-pink-600 dark:text-pink-400 print:text-black font-medium">
-                                  Draft ({20 - filledMembers} slot lagi)
+                                <span className="inline-flex items-center gap-1 text-pink-600 dark:text-pink-400 print:text-black font-medium">
+                                  Draft ({filledMembers}/20 Terisi)
                                 </span>
                               )}
                             </td>
+                            {isPanpel && (
+                              <td className="py-2.5 px-3 print:hidden">
+                                {team.status === 'Terverifikasi' ? (
+                                  <button
+                                    type="button"
+                                    disabled={updatingTeamId === team.id}
+                                    onClick={() => handleQuickUnverifyTeam(team.id, team.name)}
+                                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800 shadow-xs transition-all cursor-pointer"
+                                    title="Batalkan verifikasi tim ini dan kembalikan ke status Lengkap"
+                                  >
+                                    {updatingTeamId === team.id ? (
+                                      <Loader2 className="w-3 h-3 animate-spin" />
+                                    ) : (
+                                      <RotateCcw className="w-3 h-3 text-amber-600 dark:text-amber-400" />
+                                    )}
+                                    <span>Batal Verifikasi</span>
+                                  </button>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    disabled={updatingTeamId === team.id || playersCount < 6}
+                                    onClick={() => handleQuickVerifyTeam(team.id, team.name)}
+                                    title={playersCount < 6 ? `Minimal 6 pemain terdaftar (saat ini ${playersCount})` : `Verifikasi & kunci kuota tim ${team.name}`}
+                                    className="inline-flex items-center gap-1 px-3 py-1 rounded-lg text-[11px] font-bold bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed text-white shadow-xs transition-all cursor-pointer"
+                                  >
+                                    {updatingTeamId === team.id ? (
+                                      <Loader2 className="w-3 h-3 animate-spin" />
+                                    ) : (
+                                      <BadgeCheck className="w-3.5 h-3.5" />
+                                    )}
+                                    <span>Setujui Verifikasi</span>
+                                  </button>
+                                )}
+                              </td>
+                            )}
                           </tr>
                         );
                       })
@@ -888,11 +1064,15 @@ export default function ReportsPage() {
                         <div className="w-full flex items-center justify-between text-[10px] mb-1.5 print:mb-1 font-mono">
                           <div className="flex items-center gap-1 min-w-0">
                             <span className="text-slate-500 dark:text-purple-400/60 print:text-gray-600 truncate max-w-[55px]">{member.regNumber}</span>
-                            {team.status === 'Terverifikasi' && (
-                              <span title="Terverifikasi Panitia">
-                                <BadgeCheck className="w-3 h-3 text-emerald-500 shrink-0" />
+                            {member.isVerified ? (
+                              <span title="Atlet Lolos Verifikasi PDDikti">
+                                <BadgeCheck className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
                               </span>
-                            )}
+                            ) : team.status === 'Terverifikasi' ? (
+                              <span title="Tim Terverifikasi Panitia">
+                                <BadgeCheck className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+                              </span>
+                            ) : null}
                           </div>
                           {isPlayer ? (
                             <span className="w-5 h-5 rounded-md bg-pink-600 print:bg-slate-900 text-white font-black flex items-center justify-center text-[10px] shadow-xs">
@@ -919,7 +1099,7 @@ export default function ReportsPage() {
                         </div>
 
                         <h4 className="font-bold text-xs print:text-[11px] text-slate-900 dark:text-white print:text-black truncate w-full">
-                          {member.fullName || '(Belum Diisi)'}
+                          {member.fullName}
                         </h4>
                         <p
                           className={`text-[10px] print:text-[9px] font-black uppercase tracking-wide truncate w-full ${
@@ -933,6 +1113,11 @@ export default function ReportsPage() {
                         <p className="text-[10px] print:text-[9px] text-slate-500 dark:text-purple-400/70 print:text-gray-600 truncate w-full mt-0.5 print:mt-0">
                           {team.name}
                         </p>
+                        {member.isVerified && (
+                          <span className="mt-1 inline-flex items-center gap-0.5 text-[8px] font-bold text-emerald-600 dark:text-emerald-400 print:text-black">
+                            <BadgeCheck className="w-2.5 h-2.5" /> Terverifikasi
+                          </span>
+                        )}
                       </div>
                     );
                   })
