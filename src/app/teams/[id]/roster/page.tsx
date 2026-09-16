@@ -60,6 +60,7 @@ export default function TeamRosterPage({ params }: { params: Promise<{ id: strin
   const [hasSlotDraft, setHasSlotDraft] = useState<boolean>(false);
   const [draftSlots, setDraftSlots] = useState<number[]>([]);
   const [finalizing, setFinalizing] = useState(false);
+  const [reopening, setReopening] = useState(false);
 
   const [formData, setFormData] = useState<Partial<Member>>({});
 
@@ -358,6 +359,46 @@ export default function TeamRosterPage({ params }: { params: Promise<{ id: strin
       setErrorMessage('Terjadi kesalahan saat memfinalisasi pendaftaran.');
     } finally {
       setFinalizing(false);
+    }
+  };
+
+  const handleReopenToDraft = async () => {
+    if (!team) return;
+    if (role !== 'panpel') {
+      setErrorMessage('Hanya Panpel yang dapat membuka kunci pendaftaran.');
+      return;
+    }
+    if (team.status !== 'Lengkap') return;
+    if (!window.confirm('[PANITIA] Buka kunci pendaftaran tim ini? Status akan kembali ke Draft sehingga peserta dapat melengkapi data lagi.')) {
+      return;
+    }
+    try {
+      setReopening(true);
+      setErrorMessage(null);
+      const res = await fetch(`/api/teams/${teamId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'Draft' }),
+      });
+      if (res.status === 401) {
+        await logout();
+        return;
+      }
+      const data = await res.json();
+      if (!data.success) {
+        setErrorMessage(data.error || 'Gagal membuka kunci pendaftaran.');
+        return;
+      }
+      if (data.team) {
+        setTeam(data.team);
+      } else {
+        fetchTeam();
+      }
+    } catch (err) {
+      console.error(err);
+      setErrorMessage('Terjadi kesalahan saat membuka kunci pendaftaran.');
+    } finally {
+      setReopening(false);
     }
   };
 
@@ -730,6 +771,17 @@ export default function TeamRosterPage({ params }: { params: Promise<{ id: strin
                     {finalizing ? 'Mengunci...' : 'Kunci & Submit Final'}
                   </button>
                 )}
+                {role === 'panpel' && team.status === 'Lengkap' && (
+                  <button
+                    type="button"
+                    onClick={handleReopenToDraft}
+                    disabled={reopening}
+                    title="Kembalikan status ke Draft agar peserta dapat melengkapi data"
+                    className="px-3.5 py-2 rounded-xl text-xs font-black uppercase tracking-wider bg-amber-500 hover:bg-amber-400 disabled:opacity-60 text-white shadow-sm transition-all shrink-0 cursor-pointer self-end sm:self-center"
+                  >
+                    {reopening ? 'Membuka...' : 'Buka Kunci (ke Draft)'}
+                  </button>
+                )}
               </div>
             ) : role === 'mojisport' ? (
               <div className="mb-5 p-3.5 rounded-xl bg-sky-50/80 dark:bg-sky-950/30 border border-sky-200/80 dark:border-sky-800/60 flex items-start gap-3 text-sky-900 dark:text-sky-200 text-xs">
@@ -1083,6 +1135,18 @@ export default function TeamRosterPage({ params }: { params: Promise<{ id: strin
                         {isPhotoUploading ? 'Mengunggah Foto...' : saving ? 'Menyimpan...' : 'Simpan Slot Ini'}
                       </button>
 
+                      {role === 'panpel' && team.status === 'Lengkap' && (
+                        <button
+                          type="button"
+                          onClick={handleReopenToDraft}
+                          disabled={reopening || isPhotoUploading}
+                          title="Kembalikan status ke Draft agar peserta dapat melengkapi data"
+                          className="flex-1 sm:flex-none px-3.5 py-2.5 rounded-xl font-bold text-xs bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/60 dark:hover:bg-amber-900/60 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-800 transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                        >
+                          <RotateCcw className="w-3.5 h-3.5" />
+                          {reopening ? 'Membuka...' : 'Buka Kunci'}
+                        </button>
+                      )}
                       {team.status === 'Draft' && isEditable && (
                         <button
                           type="button"

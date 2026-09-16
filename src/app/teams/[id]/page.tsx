@@ -24,6 +24,7 @@ export default function TeamDetailPage({ params }: { params: Promise<{ id: strin
   const [team, setTeam] = useState<Team | null>(null);
   const [loading, setLoading] = useState(true);
   const [verifying, setVerifying] = useState(false);
+  const [reopening, setReopening] = useState(false);
 
   const fetchTeam = useCallback(() => {
     return fetch(`/api/teams/${teamId}`)
@@ -91,6 +92,41 @@ export default function TeamDetailPage({ params }: { params: Promise<{ id: strin
       alert('Terjadi kesalahan saat verifikasi tim');
     } finally {
       setVerifying(false);
+    }
+  };
+
+  const handleReopenToDraft = async () => {
+    if (role !== 'panpel') {
+      alert('Hanya Panpel yang dapat membuka kunci pendaftaran.');
+      return;
+    }
+    if (!confirm('[PANITIA] Buka kunci pendaftaran tim ini? Status akan kembali ke Draft sehingga peserta dapat melengkapi data lagi.')) {
+      return;
+    }
+    try {
+      setReopening(true);
+      const res = await fetch(`/api/teams/${teamId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ status: 'Draft' }),
+      });
+      if (res.status === 401) {
+        await logout();
+        return;
+      }
+      const data = await res.json();
+      if (data.success && data.team) {
+        setTeam(data.team);
+      } else {
+        alert(data.error || 'Gagal membuka kunci pendaftaran');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Terjadi kesalahan saat membuka kunci pendaftaran');
+    } finally {
+      setReopening(false);
     }
   };
 
@@ -207,6 +243,17 @@ export default function TeamDetailPage({ params }: { params: Promise<{ id: strin
             >
               {verifying ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RotateCcw className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />}
               Batal Verifikasi
+            </button>
+          )}
+          {canVerify && team.status === 'Lengkap' && (
+            <button
+              onClick={handleReopenToDraft}
+              disabled={reopening || verifying}
+              title="Kembalikan status ke Draft agar peserta dapat melengkapi data"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800 transition-all cursor-pointer shadow-xs disabled:opacity-60"
+            >
+              {reopening ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RotateCcw className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />}
+              Buka Kunci (ke Draft)
             </button>
           )}
           <button
