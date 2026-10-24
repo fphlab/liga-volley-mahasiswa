@@ -715,7 +715,7 @@ export default function ReportsPage() {
                                   <td className="py-2.5 px-3 print:hidden">
                                     {player.photoUrl ? (
                                       // eslint-disable-next-line @next/next/no-img-element
-                                      <img src={player.photoUrl} alt="Jersey" className="w-7 h-9 object-cover rounded border border-purple-200 dark:border-purple-800" />
+                                      <img src={player.photoUrl} alt="Jersey" loading="lazy" decoding="async" className="w-7 h-9 object-cover rounded border border-purple-200 dark:border-purple-800" />
                                     ) : (
                                       <span className="text-slate-400 text-[10px]">-</span>
                                     )}
@@ -1091,6 +1091,8 @@ export default function ReportsPage() {
                             <img
                               src={member.photoUrl}
                               alt={member.fullName}
+                              loading="lazy"
+                              decoding="async"
                               className="w-full h-full object-cover"
                             />
                           ) : (

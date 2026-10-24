@@ -25,15 +25,23 @@ import { deleteStorageFile, deleteStorageFiles } from './storageService';
 //   - status tim Draft/Lengkap/Terverifikasi dihitung ulang tiap edit member
 // ============================================================
 
+import { AsyncLocalStorage } from 'node:async_hooks';
+
 /**
  * Mutex in-process: menyerialisasi siklus baca-modifikasi-tulis multi-langkah
  * (mis. hitung nomor tim -> insert) agar dua request bersamaan di satu proses
  * tidak saling menimpa. Penegakan akhir tetap di database.
+ * Mendukung reentrancy melalui AsyncLocalStorage agar pemanggilan bersarang tidak deadlock.
  */
+const lockStorage = new AsyncLocalStorage<boolean>();
 let dbLock: Promise<unknown> = Promise.resolve();
 
 export function withDatabaseLock<T>(operation: () => T | Promise<T>): Promise<T> {
-  const run = dbLock.then(operation);
+  if (lockStorage.getStore()) {
+    return Promise.resolve().then(operation);
+  }
+
+  const run = dbLock.then(() => lockStorage.run(true, operation));
   dbLock = run.then(
     () => undefined,
     () => undefined,

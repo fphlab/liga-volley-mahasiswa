@@ -162,7 +162,44 @@ export default function PhotoUpload({
         }
 
         setTempPreview(dataUrl);
-        proceedUpload(file);
+
+        // Kompres & perkecil resolusi foto di sisi klien (maks 600x800 px, WebP/JPEG)
+        // agar hemat storage & cached egress Supabase
+        const MAX_W = 600;
+        const MAX_H = 800;
+        let targetW = img.width;
+        let targetH = img.height;
+        if (targetW > MAX_W || targetH > MAX_H) {
+          const ratio = Math.min(MAX_W / targetW, MAX_H / targetH);
+          targetW = Math.round(targetW * ratio);
+          targetH = Math.round(targetH * ratio);
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = targetW;
+        canvas.height = targetH;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, targetW, targetH);
+          canvas.toBlob(
+            (blob) => {
+              if (blob && blob.size > 0 && blob.size < file.size) {
+                const compressedFile = new File(
+                  [blob],
+                  file.name.replace(/\.[^.]+$/, '.webp'),
+                  { type: 'image/webp' }
+                );
+                proceedUpload(compressedFile);
+              } else {
+                proceedUpload(file);
+              }
+            },
+            'image/webp',
+            0.82
+          );
+        } else {
+          proceedUpload(file);
+        }
       };
 
       img.onerror = () => {

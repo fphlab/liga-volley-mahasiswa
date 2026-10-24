@@ -103,7 +103,24 @@ export const pgBackend: DataBackend = {
     );
     const memberRows = await fetchMemberRows(teamsResult.rows.map(r => r.id));
 
-    return assembleTeams(teamsResult.rows, memberRows);
+    const teams = assembleTeams(teamsResult.rows, memberRows);
+    const missingOwnerTeams = teams.filter((t) => !t.ownerCode);
+    if (missingOwnerTeams.length > 0) {
+      const accountsRes = await query<{ id: string; team_id: string }>(
+        `SELECT id, team_id FROM access_accounts WHERE role = 'peserta' AND team_id IS NOT NULL`
+      );
+      if (accountsRes.rows.length > 0) {
+        const ownerByTeamId = new Map(accountsRes.rows.map((a) => [a.team_id, a.id]));
+        for (const t of missingOwnerTeams) {
+          const matched = ownerByTeamId.get(t.id);
+          if (matched) {
+            t.ownerCode = matched;
+            query(`UPDATE teams SET owner_code = $1 WHERE id = $2`, [matched, t.id]).catch(() => {});
+          }
+        }
+      }
+    }
+    return teams;
   },
 
   async fetchTeamWithMembers(id: string): Promise<Team | null> {
@@ -112,7 +129,18 @@ export const pgBackend: DataBackend = {
       return null;
     }
     const memberRows = await fetchMemberRows([id]);
-    return assembleTeams(teamResult.rows, memberRows)[0] ?? null;
+    const team = assembleTeams(teamResult.rows, memberRows)[0] ?? null;
+    if (team && !team.ownerCode) {
+      const accRes = await query<{ id: string }>(
+        `SELECT id FROM access_accounts WHERE team_id = $1 AND role = 'peserta' LIMIT 1`,
+        [id]
+      );
+      if (accRes.rows.length > 0 && accRes.rows[0].id) {
+        team.ownerCode = accRes.rows[0].id;
+        query(`UPDATE teams SET owner_code = $1 WHERE id = $2`, [accRes.rows[0].id, id]).catch(() => {});
+      }
+    }
+    return team;
   },
 
   async fetchRegionCategoryPairs(status?: 'Terverifikasi' | 'ALL'): Promise<Array<{ region: string; category: string }>> {
@@ -136,7 +164,21 @@ export const pgBackend: DataBackend = {
     if (result.rows.length === 0) {
       return null;
     }
-    return result.rows[0].owner_code ?? '';
+    const ownerCode = result.rows[0].owner_code;
+    if (ownerCode && ownerCode.trim() !== '') {
+      return ownerCode;
+    }
+
+    const accRes = await query<{ id: string }>(
+      `SELECT id FROM access_accounts WHERE team_id = $1 AND role = 'peserta' LIMIT 1`,
+      [teamId]
+    );
+    if (accRes.rows.length > 0 && accRes.rows[0].id) {
+      query(`UPDATE teams SET owner_code = $1 WHERE id = $2`, [accRes.rows[0].id, teamId]).catch(() => {});
+      return accRes.rows[0].id;
+    }
+
+    return '';
   },
 
   async findUsedTeamNumbers(prefix: string): Promise<Set<number>> {    const result = await query<{ team_number: string }>(

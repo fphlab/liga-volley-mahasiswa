@@ -47,4 +47,5 @@ next-env.d.ts
 
 # private operator files (lembar kode, backup data — rahasia, jangan commit)
 /private/
+KODE_AKSES_*.md
 

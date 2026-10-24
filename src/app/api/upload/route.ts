@@ -147,6 +147,7 @@ export async function POST(request: NextRequest) {
         .from(BUCKET_NAME)
         .upload(filename, buffer, {
           contentType: file.type,
+          cacheControl: '31536000',
           upsert: true,
         });
 
@@ -162,6 +163,7 @@ export async function POST(request: NextRequest) {
           .from(BUCKET_NAME)
           .upload(filename, buffer, {
             contentType: file.type,
+            cacheControl: '31536000',
             upsert: true,
           });
       }

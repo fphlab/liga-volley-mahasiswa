@@ -61,7 +61,27 @@ export const supabaseBackend: DataBackend = {
       throw new Error(`Gagal mengambil data tim: ${error.message}`);
     }
 
-    return ((data ?? []) as unknown as TeamRowWithMembers[]).map(mapTeamRow);
+    const mapped = ((data ?? []) as unknown as TeamRowWithMembers[]).map(mapTeamRow);
+    const missingOwnerTeams = mapped.filter((t) => !t.ownerCode);
+    if (missingOwnerTeams.length > 0) {
+      const { data: accounts } = await supabase
+        .from('access_accounts')
+        .select('id, team_id')
+        .eq('role', 'peserta')
+        .not('team_id', 'is', null);
+
+      if (accounts && accounts.length > 0) {
+        const ownerByTeamId = new Map(accounts.map((a) => [a.team_id, a.id]));
+        for (const t of missingOwnerTeams) {
+          const matched = ownerByTeamId.get(t.id);
+          if (matched) {
+            t.ownerCode = matched;
+            supabase.from('teams').update({ owner_code: matched }).eq('id', t.id).then(() => {});
+          }
+        }
+      }
+    }
+    return mapped;
   },
 
   async fetchTeamWithMembers(id: string): Promise<Team | null> {
@@ -77,7 +97,24 @@ export const supabaseBackend: DataBackend = {
       throw new Error(`Gagal mengambil detail tim: ${error.message}`);
     }
 
-    return data ? mapTeamRow(data as unknown as TeamRowWithMembers) : null;
+    if (!data) return null;
+
+    const team = mapTeamRow(data as unknown as TeamRowWithMembers);
+    if (!team.ownerCode) {
+      const { data: acc } = await supabase
+        .from('access_accounts')
+        .select('id')
+        .eq('team_id', id)
+        .eq('role', 'peserta')
+        .maybeSingle();
+
+      if (acc?.id) {
+        team.ownerCode = acc.id;
+        supabase.from('teams').update({ owner_code: acc.id }).eq('id', id).then(() => {});
+      }
+    }
+
+    return team;
   },
 
   async fetchRegionCategoryPairs(status?: 'Terverifikasi' | 'ALL'): Promise<Array<{ region: string; category: string }>> {
@@ -107,7 +144,24 @@ export const supabaseBackend: DataBackend = {
     if (!data) {
       return null;
     }
-    return data.owner_code ?? '';
+    if (data.owner_code && data.owner_code.trim() !== '') {
+      return data.owner_code;
+    }
+
+    // Fallback: cari di tabel access_accounts bila owner_code di teams belum tersinkronisasi
+    const { data: acc } = await supabase
+      .from('access_accounts')
+      .select('id')
+      .eq('team_id', teamId)
+      .eq('role', 'peserta')
+      .maybeSingle();
+
+    if (acc?.id) {
+      supabase.from('teams').update({ owner_code: acc.id }).eq('id', teamId).then(() => {});
+      return acc.id;
+    }
+
+    return '';
   },
 
   async findUsedTeamNumbers(prefix: string): Promise<Set<number>> {

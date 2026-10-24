@@ -372,7 +372,7 @@ export default function TeamDetailPage({ params }: { params: Promise<{ id: strin
                     <td className="py-2.5 px-3">
                       {p.photoUrl ? (
                         // eslint-disable-next-line @next/next/no-img-element
-                        <img src={p.photoUrl} alt={p.fullName} className="w-8 h-10 object-cover rounded-md border border-purple-200 dark:border-purple-800" />
+                        <img src={p.photoUrl} alt={p.fullName} loading="lazy" decoding="async" className="w-8 h-10 object-cover rounded-md border border-purple-200 dark:border-purple-800" />
                       ) : (
                         <div className="w-8 h-10 rounded-md bg-purple-50 dark:bg-[#1f0e3f] flex items-center justify-center text-purple-400">
                           <User className="w-4 h-4" />

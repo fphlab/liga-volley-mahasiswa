@@ -793,13 +793,23 @@ export default function TeamRosterPage({ params }: { params: Promise<{ id: strin
                   </p>
                 </div>
               </div>
+            ) : team.status === 'Draft' ? (
+              <div className="mb-5 p-3.5 rounded-xl bg-amber-50/80 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-800/60 flex items-start gap-3 text-amber-900 dark:text-amber-200 text-xs">
+                <Lock className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <span className="font-bold">Mode Hanya Lihat (Bukan Akun Pemilik Tim):</span>
+                  <p className="mt-0.5 text-amber-800 dark:text-amber-300/80 text-[11px] leading-relaxed">
+                    Anda tidak memiliki hak akses edit untuk tim ini. Pengisian formulir hanya dapat dilakukan oleh akun resmi pemilik tim atau Panpel LVM.
+                  </p>
+                </div>
+              </div>
             ) : (
               <div className="mb-5 p-3.5 rounded-xl bg-amber-50/80 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-800/60 flex items-start gap-3 text-amber-900 dark:text-amber-200 text-xs">
                 <Lock className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
                 <div className="flex-1">
                   <span className="font-bold">Formulir Pendaftaran Bersifat Final (Read-Only):</span>
                   <p className="mt-0.5 text-amber-800 dark:text-amber-300/80 text-[11px] leading-relaxed">
-                    Data tim ini terkunci dan tidak dapat diubah. Jika memerlukan perbaikan data, silakan hubungi Panpel LVM.
+                    Data tim ini telah dikunci/diselesaikan ({team.status}) dan tidak dapat diubah. Jika memerlukan perbaikan data, silakan hubungi Panpel LVM.
                   </p>
                 </div>
               </div>
@@ -1092,8 +1102,14 @@ export default function TeamRosterPage({ params }: { params: Promise<{ id: strin
                 {!isEditable ? (
                   <>
                     <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-purple-300/80">
-                      <Lock className="w-3.5 h-3.5 text-amber-500" />
-                      <span>{role === 'mojisport' ? 'Formulir Terkunci (Mode Lihat).' : 'Formulir Terkunci. Hubungi Panpel bila memerlukan perbaikan data.'}</span>
+                      <Lock className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                      <span>
+                        {role === 'mojisport'
+                          ? 'Formulir Terkunci (Mode Lihat).'
+                          : team.status === 'Draft'
+                          ? 'Mode Hanya Lihat (Bukan Pemilik Tim).'
+                          : 'Formulir Terkunci. Hubungi Panpel bila memerlukan perbaikan data.'}
+                      </span>
                     </div>
 
                     <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
